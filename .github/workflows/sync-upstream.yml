@@ -1,0 +1,78 @@
+name: Sync from upstream
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Every Monday at midnight UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/anthropics/skills.git
+
+      - name: Fetch upstream
+        run: git fetch upstream main
+
+      - name: Check if upstream has new changes
+        id: check
+        run: |
+          MERGE_BASE=$(git merge-base HEAD upstream/main)
+          UPSTREAM_HEAD=$(git rev-parse upstream/main)
+          if [ "$MERGE_BASE" = "$UPSTREAM_HEAD" ]; then
+            echo "Already up to date with upstream. Nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Upstream has new changes since $MERGE_BASE"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebase custom commits onto upstream
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          # Find the merge base between our branch and upstream
+          MERGE_BASE=$(git merge-base HEAD upstream/main)
+
+          # Get our custom commits (commits after the merge base that are not in upstream)
+          CUSTOM_COMMITS=$(git log --reverse --format="%H" ${MERGE_BASE}..HEAD)
+
+          if [ -z "$CUSTOM_COMMITS" ]; then
+            echo "No custom commits found. Fast-forwarding to upstream."
+            git reset --hard upstream/main
+          else
+            echo "Found custom commits to reapply:"
+            git log --oneline ${MERGE_BASE}..HEAD
+
+            # Reset to upstream's latest
+            git reset --hard upstream/main
+
+            # Cherry-pick our custom commits on top
+            for COMMIT in $CUSTOM_COMMITS; do
+              echo "Applying commit: $(git log --oneline -1 $COMMIT)"
+              git cherry-pick "$COMMIT" || {
+                echo "::warning::Conflict detected while applying commit $COMMIT."
+                git cherry-pick --abort
+                echo "::error::Failed to apply custom commit $COMMIT. Manual intervention required."
+                exit 1
+              }
+            done
+          fi
+
+      - name: Push changes
+        if: steps.check.outputs.changed == 'true'
+        run: git push --force-with-lease origin main
