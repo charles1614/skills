@@ -30,7 +30,6 @@
         "./skills/algorithmic-art",
         "./skills/brand-guidelines",
         "./skills/canvas-design",
-        "./skills/create-deepwiki",
         "./skills/doc-coauthoring",
         "./skills/frontend-design",
         "./skills/internal-comms",
@@ -40,6 +39,16 @@
         "./skills/theme-factory",
         "./skills/web-artifacts-builder",
         "./skills/webapp-testing"
+      ]
+    },
+    {
+      "name": "charles-skills",
+      "description": "Custom skills by Charles: architecture documentation and academic paper analysis",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/create-deepwiki",
+        "./skills/paper-reader"
       ]
     }
     ,
