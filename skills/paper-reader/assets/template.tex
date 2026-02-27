@@ -1,0 +1,354 @@
+% -*- coding: utf-8 -*-
+% Paper Analysis Report — XeLaTeX Template
+% Compile with: xelatex -interaction=nonstopmode <filename>.tex (run twice for TOC)
+\documentclass[11pt, a4paper]{article}
+
+% ============================================================
+% Engine Detection & CJK Setup
+% ============================================================
+\usepackage{xeCJK}
+\usepackage{fontspec}
+
+% Chinese fonts
+\setCJKmainfont[BoldFont={Noto Sans CJK SC Medium}]{Noto Serif CJK SC}
+\setCJKsansfont{Noto Sans CJK SC}
+\setCJKmonofont{Noto Sans Mono CJK SC}
+
+% Latin fonts (referenced by filename for TeX tree discovery)
+\setmainfont{texgyretermes}[
+  Extension = .otf,
+  UprightFont = *-regular,
+  BoldFont = *-bold,
+  ItalicFont = *-italic,
+  BoldItalicFont = *-bolditalic
+]
+\setsansfont{texgyreheros}[
+  Extension = .otf,
+  UprightFont = *-regular,
+  BoldFont = *-bold,
+  ItalicFont = *-italic,
+  BoldItalicFont = *-bolditalic
+]
+\setmonofont{texgyrecursor}[
+  Extension = .otf,
+  UprightFont = *-regular,
+  BoldFont = *-bold,
+  ItalicFont = *-italic,
+  BoldItalicFont = *-bolditalic
+]
+
+% CJK spacing tuning
+\xeCJKsetup{CJKmath=true, PlainEquation=true}
+
+% ============================================================
+% Page Layout
+% ============================================================
+\usepackage[
+  a4paper,
+  top=2.2cm, bottom=2.2cm,
+  left=2.5cm, right=2.5cm,
+  headheight=25pt
+]{geometry}
+
+\usepackage{setspace}
+\setstretch{1.2}
+
+% ============================================================
+% Color Palette
+% ============================================================
+\usepackage[dvipsnames,svgnames,x11names]{xcolor}
+
+\definecolor{PrimaryBlue}{HTML}{1A5276}
+\definecolor{AccentTeal}{HTML}{148F77}
+\definecolor{LightBg}{HTML}{F4F6F7}
+\definecolor{DarkText}{HTML}{2C3E50}
+\definecolor{SubtleGray}{HTML}{7F8C8D}
+\definecolor{WarmOrange}{HTML}{E67E22}
+\definecolor{CriticalRed}{HTML}{C0392B}
+\definecolor{StrengthGreen}{HTML}{27AE60}
+\definecolor{MathBlueBg}{HTML}{EBF5FB}
+\definecolor{KeyBg}{HTML}{E8F8F5}
+
+% ============================================================
+% Section Styling
+% ============================================================
+\usepackage{titlesec}
+
+\titleformat{\section}
+  {\Large\bfseries\sffamily\color{PrimaryBlue}}
+  {\thesection}{0.8em}{}
+  [\vspace{-0.3ex}{\color{AccentTeal}\rule{\textwidth}{0.5pt}}]
+
+\titleformat{\subsection}
+  {\large\sffamily\color{PrimaryBlue!80!black}}
+  {\thesubsection}{0.6em}{}
+
+\titleformat{\subsubsection}
+  {\normalsize\sffamily\color{PrimaryBlue!60!black}}
+  {\thesubsubsection}{0.5em}{}
+
+\titlespacing*{\section}{0pt}{2.5ex plus 1ex minus .2ex}{1.5ex plus .2ex}
+\titlespacing*{\subsection}{0pt}{1.8ex plus 0.8ex minus .2ex}{0.8ex plus .2ex}
+\titlespacing*{\subsubsection}{0pt}{1.2ex plus 0.5ex minus .1ex}{0.5ex plus .1ex}
+
+% ============================================================
+% Header & Footer
+% ============================================================
+\usepackage{fancyhdr}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\sffamily\color{SubtleGray} \shorttitle}
+\fancyhead[R]{}
+\fancyfoot[C]{\small\sffamily\color{SubtleGray} --- \thepage{} ---}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{AccentTeal!50}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\footrulewidth}{0pt}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\small\sffamily\color{SubtleGray} --- \thepage{} ---}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% ============================================================
+% Highlight Boxes (tcolorbox)
+% ============================================================
+\usepackage[most]{tcolorbox}
+
+% Key insight / TL;DR box
+\newtcolorbox{keyinsight}[1][核心要点]{
+  enhanced,
+  colback=KeyBg,
+  colframe=AccentTeal,
+  boxrule=0.6pt,
+  left=10pt, right=10pt, top=8pt, bottom=8pt,
+  arc=4pt,
+  fonttitle=\bfseries\sffamily\small\color{AccentTeal},
+  title={#1},
+  shadow={1pt}{-1pt}{0pt}{AccentTeal!15},
+  breakable
+}
+
+% Strength box
+\newtcolorbox{strengthbox}[1][优势分析]{
+  enhanced,
+  colback=StrengthGreen!5,
+  colframe=StrengthGreen!60!black,
+  boxrule=0.4pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  arc=3pt,
+  coltitle=white,
+  fonttitle=\bfseries\sffamily\small,
+  title={#1},
+  breakable
+}
+
+% Weakness / critical box
+\newtcolorbox{weaknessbox}[1][不足与局限]{
+  enhanced,
+  colback=CriticalRed!4,
+  colframe=CriticalRed!50!black,
+  boxrule=0.4pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  arc=3pt,
+  coltitle=white,
+  fonttitle=\bfseries\sffamily\small,
+  title={#1},
+  breakable
+}
+
+% Math / formula highlight box
+\newtcolorbox{mathbox}[1][]{
+  enhanced,
+  colback=MathBlueBg,
+  colframe=PrimaryBlue!40,
+  boxrule=0.4pt,
+  left=10pt, right=10pt, top=8pt, bottom=8pt,
+  arc=3pt,
+  breakable,
+  title={#1},
+  fonttitle=\bfseries\sffamily\small\color{PrimaryBlue}
+}
+
+% Info box (for metadata, reading suggestions, etc.)
+\newtcolorbox{infobox}[1][]{
+  enhanced,
+  colback=LightBg,
+  colframe=SubtleGray!60,
+  boxrule=0.3pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  arc=3pt,
+  breakable,
+  title={#1},
+  fonttitle=\bfseries\sffamily\small\color{DarkText}
+}
+
+% ============================================================
+% Math, Algorithms, Tables
+% ============================================================
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{makecell}
+
+% ============================================================
+% Code Listings
+% ============================================================
+\usepackage{listings}
+\lstset{
+  basicstyle=\small\ttfamily\color{DarkText},
+  backgroundcolor=\color{LightBg},
+  frame=single,
+  rulecolor=\color{SubtleGray!40},
+  breaklines=true,
+  numbers=left,
+  numberstyle=\tiny\color{SubtleGray},
+  keywordstyle=\color{PrimaryBlue}\bfseries,
+  commentstyle=\color{StrengthGreen!70!black}\itshape,
+  stringstyle=\color{WarmOrange},
+  tabsize=4,
+  xleftmargin=1em,
+  framexleftmargin=0.5em
+}
+
+% ============================================================
+% Hyperlinks & PDF Metadata
+% ============================================================
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=PrimaryBlue,
+  citecolor=AccentTeal,
+  urlcolor=AccentTeal!80!black,
+  pdftitle={%PAPER_TITLE%},
+  pdfauthor={AI Research Analysis},
+  bookmarksnumbered=true,
+  bookmarksopen=true
+}
+
+% ============================================================
+% Lists
+% ============================================================
+\usepackage{enumitem}
+\setlist{nosep, leftmargin=1.5em}
+\setlist[itemize,1]{label=\color{AccentTeal}\textbullet}
+\setlist[itemize,2]{label=\color{PrimaryBlue!60}\textendash}
+
+% ============================================================
+% Graphics
+% ============================================================
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+
+% ============================================================
+% Custom Commands
+% ============================================================
+% Title block commands
+\newcommand{\shorttitle}{}
+\newcommand{\papertitle}[1]{%
+  \renewcommand{\shorttitle}{#1}%
+  \begin{center}
+    \vspace*{0.3cm}
+    {\small\sffamily\color{SubtleGray} 论文深度分析}\\[0.6em]
+    {\LARGE\bfseries\sffamily\color{PrimaryBlue} #1}
+  \end{center}
+}
+\newcommand{\paperauthors}[1]{%
+  \begin{center}{\normalsize\color{DarkText} #1}\end{center}
+}
+\newcommand{\papervenue}[1]{%
+  \begin{center}{\small\color{SubtleGray}\itshape #1}\end{center}
+}
+\newcommand{\paperdate}[1]{%
+  \begin{center}{\small\color{SubtleGray} 分析日期：#1}\end{center}
+}
+
+% Colored marks for strengths/weaknesses
+\newcommand{\gmark}[1]{\textcolor{StrengthGreen!80!black}{\bfseries #1}}
+\newcommand{\rmark}[1]{\textcolor{CriticalRed!80!black}{\bfseries #1}}
+\newcommand{\omark}[1]{\textcolor{WarmOrange!80!black}{\bfseries #1}}
+
+% Rating stars
+\newcommand{\ratingfull}{\textcolor{WarmOrange}{$\bigstar$}}
+\newcommand{\ratinghalf}{\textcolor{WarmOrange!40}{$\bigstar$}}
+\newcommand{\ratingempty}{\textcolor{SubtleGray!30}{$\bigstar$}}
+
+% ============================================================
+% Document Begin
+% ============================================================
+\begin{document}
+
+% --- Title Block ---
+% Replace placeholders with actual paper info
+\papertitle{%PAPER_TITLE%}
+\paperauthors{%PAPER_AUTHORS%}
+\papervenue{%PAPER_VENUE% \quad | \quad %PAPER_YEAR%}
+\paperdate{\today}
+
+\vspace{0.8em}
+
+% --- One-line summary ---
+\begin{keyinsight}[一句话总结]
+%ONE_LINE_SUMMARY%
+\end{keyinsight}
+
+\vspace{0.5em}
+
+% --- Table of Contents ---
+{
+  \hypersetup{linkcolor=DarkText}
+  \tableofcontents
+}
+
+\newpage
+
+% ============================================================
+% CONTENT SECTIONS — Fill below with generated analysis
+% ============================================================
+
+% Section 1: 论文元信息与分类
+% \section{论文元信息与分类}
+% \begin{infobox}[论文信息]
+% \begin{tabular}{@{}ll@{}}
+% \textbf{标题} & Paper Title \\
+% \textbf{作者} & Authors \\
+% \textbf{机构} & Affiliations \\
+% \textbf{发表} & Venue, Year \\
+% \textbf{类型} & Systems / ML Algorithm / Theory / Survey / Benchmark / LLM Technical Report \\
+% \end{tabular}
+% \end{infobox}
+
+% Section 2: 核心摘要与定性评估
+% \section{核心摘要与定性评估}
+
+% Section 3: 创新贡献与研究定位
+% \section{创新贡献与研究定位}
+
+% Section 4: 研究背景与问题形式化
+% \section{研究背景与问题形式化}
+
+% Section 5: 技术方法与系统架构
+% \section{技术方法与系统架构}
+
+% Section 6: 实验设计与评估分析
+% \section{实验设计与评估分析}
+
+% Section 7: 批判性分析
+% \section{批判性分析}
+
+% Section 8: 数学与算法深入分析
+% \section{数学与算法深入分析}
+
+% Section 9: 结论与未来展望
+% \section{结论与未来展望}
+
+% Section 10: 延伸阅读建议
+% \section{延伸阅读建议}
+
+\end{document}
