@@ -43,12 +43,69 @@ CAPTION_PATTERN = re.compile(
 )
 
 
-def _is_body_or_header(block, content_width):
+def _detect_body_font_size(doc):
+    """Detect the dominant body text font size from the document.
+
+    Scans all text spans across all pages, bins font sizes to the nearest
+    0.5pt, and returns the size with the highest total character count.
+    Returns None if detection fails (no text or ambiguous distribution).
+    """
+    size_chars = {}  # {rounded_size: total_char_count}
+    total_chars = 0
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        blocks = page.get_text("dict", flags=0)["blocks"]
+        for b in blocks:
+            if b["type"] != 0:
+                continue
+            for line in b["lines"]:
+                for span in line["spans"]:
+                    n = len(span["text"].strip())
+                    if n > 0:
+                        binned = round(span["size"] * 2) / 2
+                        size_chars[binned] = size_chars.get(binned, 0) + n
+                        total_chars += n
+
+    if not size_chars or total_chars == 0:
+        return None
+
+    dominant_size = max(size_chars, key=size_chars.get)
+
+    # Sanity check: dominant size should account for a meaningful share
+    if size_chars[dominant_size] < total_chars * 0.20:
+        return None
+
+    return dominant_size
+
+
+def _block_font_size(block):
+    """Return the dominant font size (in points) of a text block.
+
+    Uses the font size with the most characters in the block, which is
+    robust against mixed sizes from math subscripts/superscripts.
+    """
+    size_chars = {}
+    for line in block["lines"]:
+        for span in line["spans"]:
+            n = len(span["text"].strip())
+            if n > 0:
+                size_chars[span["size"]] = size_chars.get(span["size"], 0) + n
+    if not size_chars:
+        return None
+    return max(size_chars, key=size_chars.get)
+
+
+def _is_body_or_header(block, content_width, body_font_size=None):
     """Check if a text block is body text or section header (not figure content).
 
     Body text and headers should be excluded from figure regions. Figure
     annotations (axis labels, legends, short labels) are typically narrow
     and short, so they won't match these heuristics.
+
+    When body_font_size is provided, font size is used as the primary signal:
+    blocks significantly smaller than body text are figure annotations,
+    blocks significantly larger are section headers.
     """
     bbox = block["bbox"]
     b_width = bbox[2] - bbox[0]
@@ -65,6 +122,22 @@ def _is_body_or_header(block, content_width):
     if CAPTION_PATTERN.match(text):
         return False
 
+    # --- Font-size-based classification (primary signal) ---
+    if body_font_size is not None:
+        blk_size = _block_font_size(block)
+        if blk_size is not None:
+            ratio = blk_size / body_font_size
+            # Significantly smaller than body text → figure annotation
+            if ratio < 0.85:
+                return False
+            # Significantly larger than body text → section header
+            # Guard: real headers are 1-3 lines (~60pt max height).
+            # Very tall blocks (>60pt) are rotated margin text or
+            # watermarks (e.g., "arXiv:2512.02556v1 [cs.CL] ...").
+            block_height = bbox[3] - bbox[1]
+            if ratio > 1.15 and block_height < 60:
+                return True
+
     # Multi-line blocks spanning significant width are body text
     if n_lines >= 2 and width_ratio > 0.5 and len(text) > 30:
         return True
@@ -77,6 +150,15 @@ def _is_body_or_header(block, content_width):
     # Require significant width (>40% content width) to avoid matching
     # numbered items inside figures (e.g., "1. Query and Checkitem")
     if re.match(r"^\d+(\.\d+)*\.\s+\S", text) and len(text) >= 8 and width_ratio > 0.4:
+        return True
+
+    # Lettered section headers: "A. Title", "B. Title" (appendices)
+    if re.match(r"^[A-Z]\.\s+\S", text) and len(text) >= 8 and width_ratio > 0.4:
+        return True
+
+    # Common single-word section headers (fallback when font size unavailable)
+    if re.match(r"^(Appendices|Appendix|References|Acknowledgments?|Bibliography)\s*$",
+                text, re.IGNORECASE) and width_ratio > 0.2:
         return True
 
     return False
@@ -117,6 +199,13 @@ def find_figure_captions(page, page_num):
         if block["type"] != 0:  # text blocks only
             continue
 
+        # Collect full block text to filter in-text references
+        block_text = ""
+        for bl_line in block["lines"]:
+            for span in bl_line["spans"]:
+                block_text += span["text"]
+        block_text = block_text.strip()
+
         # Collect all text and check each line
         for line in block["lines"]:
             line_text = "".join(span["text"] for span in line["spans"]).strip()
@@ -126,6 +215,12 @@ def find_figure_captions(page, page_num):
                 continue
 
             fig_num = int(m.group(1) or m.group(2) or m.group(3))
+
+            # Skip in-text references: if the block text doesn't start with
+            # the caption pattern, this "Figure N." is just an inline mention
+            # that happens to begin a wrapped line within a body paragraph.
+            if not CAPTION_PATTERN.match(block_text):
+                continue
 
             # Use the full text block bbox (caption may span multiple lines)
             captions.append({
@@ -160,7 +255,7 @@ def detect_content_margins(page):
     return left, right
 
 
-def find_figure_region(page, caption, prev_caption_bottom, padding=10):
+def find_figure_region(page, caption, prev_caption_bottom, padding=10, body_font_size=None):
     """Compute the figure's bounding box above a caption.
 
     Strategy:
@@ -195,26 +290,73 @@ def find_figure_region(page, caption, prev_caption_bottom, padding=10):
     # Only image blocks (type=1) are used here — not drawings, because
     # drawings include table rules, decorative lines, etc. that would
     # incorrectly disable body text exclusion for the entire page.
+    # Also skip small decorative images (logos, icons, bullet graphics)
+    # that appear in title/header areas — these can anchor
+    # topmost_visual_y too high, disabling body text exclusion for
+    # the entire page (e.g., a "K" logo in the paper title on page 1).
+    MIN_IMG_DIM = 80  # points (~1.1 inches) — real figure content is larger
     topmost_visual_y = cap_top_y  # default: right above caption
     for b in blocks:
         if b["type"] != 1:
             continue
         b_top = b["bbox"][1]
         b_bottom = b["bbox"][3]
+        b_width = b["bbox"][2] - b["bbox"][0]
+        b_height = b_bottom - b_top
+        # Skip small decorative images (logos, icons, inline graphics)
+        if b_width < MIN_IMG_DIM and b_height < MIN_IMG_DIM:
+            continue
         if b_bottom <= cap_top_y + 5 and b_top >= base_upper - 5:
             topmost_visual_y = min(topmost_visual_y, b_top)
 
-    # Now exclude body text, but only above the topmost image block
+    # For vector-only figures (no image blocks found), also scan vector
+    # drawings to set topmost_visual_y.  Find the main drawing cluster
+    # by looking for the largest gap in sorted y-positions — the gap
+    # separates page header decorations from the figure content.
+    if topmost_visual_y == cap_top_y:
+        try:
+            pre_drawings = page.get_drawings()
+        except Exception:
+            pre_drawings = []
+
+        draw_y0s = []
+        for d in pre_drawings:
+            r = d["rect"]
+            if r.y0 < base_upper + 10 or r.y1 > cap_top_y + 5:
+                continue
+            if r.width < 2 and r.height < 2:
+                continue
+            if r.height < 2 and r.width > page_rect.width * 0.8:
+                continue
+            draw_y0s.append(r.y0)
+
+        if len(draw_y0s) >= 10:
+            draw_y0s.sort()
+            best_gap = 0
+            cluster_idx = 0
+            search_limit = min(len(draw_y0s) - 1, 20)
+            for i in range(search_limit):
+                gap = draw_y0s[i + 1] - draw_y0s[i]
+                if gap > best_gap:
+                    best_gap = gap
+                    cluster_idx = i + 1
+            if best_gap > 50:
+                topmost_visual_y = draw_y0s[cluster_idx]
+
+    # Now exclude body text, but only above the topmost visual element.
+    # Use b_top (not b_bottom) so text blocks starting above the visual
+    # zone are eligible for exclusion even if their bbox extends into it
+    # (e.g., an abstract whose bottom edge overlaps with chart elements).
     upper_limit = base_upper
     for b in blocks:
         if b["type"] != 0:
             continue
         b_top = b["bbox"][1]
         b_bottom = b["bbox"][3]
-        # Only consider blocks between base_upper and topmost visual
-        if b_bottom > topmost_visual_y or b_top < base_upper - 5:
+        # Only consider blocks that START above the topmost visual
+        if b_top > topmost_visual_y or b_top < base_upper - 5:
             continue
-        if _is_body_or_header(b, content_width):
+        if _is_body_or_header(b, content_width, body_font_size):
             upper_limit = max(upper_limit, b_bottom + 5)
 
     # Guard: don't push so close to caption that no figure region remains
@@ -222,13 +364,16 @@ def find_figure_region(page, caption, prev_caption_bottom, padding=10):
         upper_limit = base_upper
 
     # Find image blocks in the zone above this caption
+    # Clamp lower bound to base_upper: the -5 tolerance must never
+    # reach above the hard boundary (page header or previous caption).
+    img_lower = max(upper_limit - 5, base_upper)
     fig_images = []
     for b in blocks:
         if b["type"] != 1:  # image blocks only
             continue
         b_top = b["bbox"][1]
         b_bottom = b["bbox"][3]
-        if b_bottom <= cap_top_y + 5 and b_top >= upper_limit - 5:
+        if b_bottom <= cap_top_y + 5 and b_top >= img_lower:
             fig_images.append(b)
 
     # Determine if figure is full-width or partial-width (side-by-side)
@@ -255,11 +400,17 @@ def find_figure_region(page, caption, prev_caption_bottom, padding=10):
     except Exception:
         drawings = []
 
+    # Clamp drawing lower bound: the -5 tolerance must never reach
+    # above the hard boundary (page header bottom or previous caption).
+    # Without this clamp, header decoration rules (which sit just above
+    # base_upper) can leak through the tolerance and pull fig_y0 up
+    # into the page header area.
+    draw_lower = max(upper_limit - 5, base_upper)
     fig_drawings = []
     for d in drawings:
         r = d["rect"]
         # Drawing must be above the caption and below the upper limit
-        if r.y1 > cap_top_y + 5 or r.y0 < upper_limit - 5:
+        if r.y1 > cap_top_y + 5 or r.y0 < draw_lower:
             continue
         # Drawing must overlap with the figure's x-range
         if r.x1 < fig_x0 - 20 or r.x0 > fig_x1 + 20:
@@ -325,6 +476,11 @@ def extract_figures(pdf_path, output_dir, dpi=300, padding=10):
 
     os.makedirs(output_dir, exist_ok=True)
 
+    # Detect dominant body text font size for figure/body classification
+    body_font_size = _detect_body_font_size(doc)
+    if body_font_size is not None:
+        print(f"Detected body font size: {body_font_size:.1f}pt")
+
     # Phase 1: Collect all figure captions across all pages
     all_captions = []
     for page_num in range(len(doc)):
@@ -350,14 +506,17 @@ def extract_figures(pdf_path, output_dir, dpi=300, padding=10):
         page = doc[cap["page"]]
 
         # Find previous caption on the same page (for upper boundary)
+        # Find captions above this one (not side-by-side).
+        # Require the previous caption to END above the current caption's top.
         same_page_caps = [c for c in unique_captions
-                          if c["page"] == cap["page"] and c["bbox"][1] < cap["bbox"][1]]
+                          if c["page"] == cap["page"]
+                          and c["bbox"][3] < cap["bbox"][1]]
         if same_page_caps:
             prev_bottom = max(c["bbox"][3] for c in same_page_caps)
         else:
             prev_bottom = _detect_page_header_bottom(page)
 
-        clip, n_images = find_figure_region(page, cap, prev_bottom, padding)
+        clip, n_images = find_figure_region(page, cap, prev_bottom, padding, body_font_size)
 
         # Render at high DPI
         pix = page.get_pixmap(clip=clip, dpi=dpi)
