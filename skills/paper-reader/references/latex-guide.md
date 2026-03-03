@@ -155,13 +155,60 @@ Baseline B       & 87.4 & 0.8$\times$ & 340M \\
 \end{infobox}
 ```
 
+### Long equations (avoiding overflow)
+
+Equations in academic papers often contain repeated subexpressions (e.g., policy ratios, attention scores) that make a single-line `equation` overflow. **Always check if an equation will fit in one line** — if it has more than ~80 characters of math content or repeated fractions, it will likely overflow.
+
+**Strategy 1: Introduce shorthand notation** (preferred when a subexpression repeats 2+ times):
+
+```latex
+\begin{mathbox}[策略优化目标]
+令~$\rho_j^i = \frac{\pi_\theta(y_j^i \mid x,\, y_j^{0:i})}{\pi_{\text{old}}(y_j^i \mid x,\, y_j^{0:i})}$，则：
+\begin{equation}
+  L(\theta) = \mathbb{E}_{x \sim D}\!\Biggl[\,
+    \frac{1}{N}\sum_{j=1}^{K}\sum_{i=1}^{|y_j|}
+    \text{Clip}\bigl(\rho_j^i,\;\alpha,\;\beta\bigr)
+    \bigl(r(x,y_j) - \bar{r}(x)\bigr)
+    - \tau\bigl(\log \rho_j^i\bigr)^2
+  \,\Biggr]
+  \label{eq:objective}
+\end{equation}
+\end{mathbox}
+```
+
+**Strategy 2: Multi-line with `split`** (when the equation has distinct additive/subtractive terms):
+
+```latex
+\begin{equation}
+\begin{split}
+  \mathcal{L}(\theta) &= \sum_{i=1}^{N} \ell\bigl(f_\theta(x_i),\, y_i\bigr)
+    + \lambda_1 \|\theta\|_2^2 \\
+  &\quad + \lambda_2 \sum_{j \in \mathcal{N}(i)} d\bigl(f_\theta(x_i),\, f_\theta(x_j)\bigr)
+\end{split}
+\label{eq:loss}
+\end{equation}
+```
+
+**Strategy 3: `multline`** (when there's no natural alignment point):
+
+```latex
+\begin{multline}
+  p(x_1, x_2, \ldots, x_n) = p(x_1) \cdot p(x_2 \mid x_1)
+    \cdot p(x_3 \mid x_1, x_2) \\
+    \cdots p(x_n \mid x_1, \ldots, x_{n-1})
+\label{eq:chain}
+\end{multline}
+```
+
+**Rule of thumb**: If a formula from the paper has deeply nested fractions or long subscripts/superscripts repeated multiple times, define a shorthand variable first (`令~$\rho = ...$`), then write the main equation using the shorthand. This is both more readable and avoids overflow.
+
 ### Qualitative assessment table
 
 ```latex
 \begin{table}[htbp]
 \centering
 \caption{定性评估}
-\begin{tabular}{lll}
+\begin{tabular}{llp{0.55\textwidth}}
 \toprule
 \textbf{评估维度} & \textbf{评级} & \textbf{说明} \\
 \midrule
@@ -249,7 +296,7 @@ xelatex -interaction=nonstopmode paper_analysis.tex
 | `Undefined control sequence \CJK...` | xeCJK not loaded | Ensure `\usepackage{xeCJK}` is present |
 | `Font ... not found` | Missing system font | For CJK: check `fc-list :lang=zh`; For Latin: use filename-based font loading (see template) |
 | `Missing \begin{document}` | Encoding issue | Ensure file is saved as UTF-8 without BOM |
-| `Overfull \hbox` | Long formula/URL | Add `\allowbreak` or use `\url{}` with hyperref |
+| `Overfull \hbox` | Long formula or URL | For equations: use shorthand notation, `split`, or `multline` (see "Long equations" section above). For URLs: use `\url{}` with hyperref. For tables: use `p{width}` columns instead of `l` for long text. |
 | `Package tcolorbox Error` | Missing tcolorbox library | Use `\usepackage[most]{tcolorbox}` |
 
 ### Figure-related Errors
