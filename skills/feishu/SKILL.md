@@ -2,15 +2,16 @@
 name: feishu
 description: >-
   Feishu (Lark) wiki tools: read pages as markdown, write markdown to new pages,
-  optimize document formatting, copy/sync/export wiki pages. Use this skill when
-  the user wants to interact with Feishu wiki — read, write, copy, sync, export,
-  or optimize/polish wiki pages. Triggers on: feishu, lark, 飞书, wiki page,
-  read feishu, write feishu, optimize feishu, copy feishu, sync feishu, export feishu.
+  optimize document formatting, upload local markdown files, copy/sync/export wiki pages.
+  Use this skill when the user wants to interact with Feishu wiki — read, write, copy,
+  sync, export, optimize/polish wiki pages, or upload a local .md file to Feishu.
+  Triggers on: feishu, lark, 飞书, wiki page, read feishu, write feishu, optimize feishu,
+  copy feishu, sync feishu, export feishu, upload feishu, upload md to feishu, upload markdown.
 ---
 
 # Feishu Wiki Tools
 
-Read, write, optimize, copy, sync, and export Feishu wiki pages.
+Read, write, optimize, upload local markdown, copy, sync, and export Feishu wiki pages.
 
 ## Skill Files Location
 
@@ -53,9 +54,14 @@ Determine the action from the user's intent:
 | Read/view/fetch a page | `read SOURCE_URL` |
 | Write/create/publish a page | `write PARENT_URL` |
 | Optimize/polish a page | `optimize SOURCE_URL DEST_URL` |
+| Upload a local markdown file | `upload MD_PATH PARENT_URL` |
 | Copy a page | `copy SOURCE_URL TARGET_URL` |
 | Sync pages | `sync SOURCE_URL TARGET_URL` |
 | Export to local files | `export SOURCE_URL` |
+
+**`upload` command**: `/feishu upload [md_path] [parent_url]`
+- `md_path` may be relative (resolved from current working directory) or absolute
+- `parent_url` is the Feishu wiki URL under which the new page will be created as a sub-page
 
 ---
 
@@ -114,6 +120,185 @@ Create a new Feishu wiki page from markdown content.
 - The `MARKDOWN` delimiter must be quoted (`'MARKDOWN'`) to prevent variable expansion.
 - Supported: headings, paragraphs, bold, italic, code, strikethrough, links, bullet/ordered lists, code blocks, blockquotes, dividers, **tables** (`| col | col |` pipe format), callout blocks, quote containers (`|>` prefix), LaTeX equations.
 - Images are not yet supported for write-back.
+
+---
+
+## Action: upload
+
+Upload a local markdown file to Feishu as a new sub-page, applying the same light-touch optimization rules as the `optimize` action before publishing.
+
+**Format**: `/feishu upload MD_PATH PARENT_URL`
+
+- `MD_PATH` — path to the local `.md` file (relative to CWD or absolute)
+- `PARENT_URL` — Feishu wiki URL; the new page is created as its direct child
+
+**Core principle**: The local file is the authority. Apply formatting improvements from the optimization guide, but do NOT rewrite the author's content, tone, or intent.
+
+### Workflow
+
+Follow these 5 tasks in order:
+
+#### Task 1: Read the Local Markdown File
+
+Resolve the path:
+- If `MD_PATH` starts with `/`, it is absolute — use as-is
+- Otherwise, resolve relative to the current working directory
+
+```bash
+# Resolve relative path if needed
+realpath MD_PATH
+```
+
+Read the file content. This is the document to upload.
+
+**Analyze carefully:**
+- Document title (first H1, or filename if no H1)
+- Overall topic and purpose
+- Author's writing style and tone
+- Existing heading structure and hierarchy
+- Content organization and flow
+- Use of formatting (bold, lists, code blocks, tables, LaTeX, etc.)
+
+**Record your observations** — you will need them in Task 4 to preserve the original character.
+
+#### Task 2: Format Analysis
+
+Read [`references/optimization-guide.md`](<skill-directory>/references/optimization-guide.md) for the detailed comparison framework and known format conventions.
+
+Check the document against these specific format conventions:
+
+| Convention | Expected Pattern | Source Status |
+|------------|-----------------|---------------|
+| Opening callout | `[!callout]` with description + paper/repo links | Present? Missing? |
+| Numbered headings | `## 1 标题` / `### 1.1 子标题` | Correct numbering? Duplicates? |
+| Heading groups | Continuous numbering across whole doc (no resets) | Multiple `## 1` resets? |
+| Level conflicts | Group/chapter titles at correct level vs. sub-items | Any group title at same level as children? |
+| Key concept callouts | `\|>` quote containers for key insights | Used where appropriate? |
+| Code block tags | Language tag on every code block | Any bare ` ``` `? |
+| Bold key terms | First mention of important technical terms bolded | Applied? |
+| Inline emphasis | `{red:...}` for critical constraints; `{red:**...**}` for most important conclusion | Used sparingly? |
+| LaTeX equations | `$inline$` and `$$display$$` | Correct syntax? |
+
+**Important**: Only note FORMAT differences. Do not evaluate content topics.
+
+#### Task 3: Content Review (Light Touch)
+
+Read [`references/conservative-edits.md`](<skill-directory>/references/conservative-edits.md) for detailed guidelines.
+
+**Fix These:**
+- **Factual errors**: Incorrect technical information, wrong version numbers, broken links
+- **Incomplete descriptions**: Sentences that trail off, missing explanations, TODO/placeholder text
+- **Obvious typos**: Spelling errors, grammar mistakes that change meaning
+- **Broken formatting**: Unclosed markdown, inconsistent list indentation
+
+**Do NOT Change:**
+- **Author's tone**: If they write casually, keep it casual
+- **Content focus**: Respect what the author chose to emphasize
+- **Technical opinions**: If they recommend a tool or approach, keep it
+- **Original structure**: Only adjust structure if it clearly conflicts with format conventions
+- **Level of detail**: If the author was brief on a topic, respect that
+
+#### Task 4: Generate Optimized Version
+
+**CRITICAL**: The optimized document should be **80%+ identical** to the original. Changes should be subtle improvements, not rewrites.
+
+**What to change:**
+
+1. **Opening callout** — Add a `[!callout]` block at the top if missing
+   - Use `[!callout icon=ICON bg=2 border=2]` — choose an appropriate icon (e.g. `gift`, `bulb`, `bookmark`, `pushpin`, `rocket`, `star`)
+   - Put the document's intro description AND paper/code links **all inside** the callout as child paragraphs
+   - Example:
+     ```
+     > [!callout icon=gift bg=2 border=2]
+     > 本文档...的简介文字。
+     >
+     > **Paper**: [Title](url)
+     >
+     > **Code**: [GitHub](url)
+     >
+     ```
+   - If the source already has an intro `|>` quote container or a plain `>` blockquote that functions as the document summary (e.g., `> 一句话总结: ...`), move its text into the callout as a child paragraph and remove the original block
+
+2. **Heading restructuring** — Fix numbering AND hierarchy when needed:
+   - Apply **continuous sequential numbering** across the whole document (`## 1`, `## 2`, `## 3`…), not per-section resets
+   - **Heading groups**: If multiple sections each restart at "1.", "2."… choose:
+     - *Elevate the group header*: if a heading logically contains sub-items also at the same level, promote it one level up
+     - *Continuous renumber*: if no clear group header, renumber all items sequentially
+   - **Level conflicts**: if a heading that groups sub-sections is at the same level as those sub-sections, promote it one level
+   - **Renaming allowed**: you MAY revise a heading's title when it's too generic — keep the core topic, just improve precision
+   - **Reordering allowed**: you MAY reorder sections when the logical flow clearly improves (note each reorder in the summary)
+
+3. **Key concept callouts** — match the document's existing callout style (`|>` or `>`)
+   - Only where the document already emphasizes something but doesn't use callout format
+   - Do NOT add callouts around content that wasn't emphasized in the original
+
+4. **Code block language tags** — Add missing language tags to bare code blocks
+
+5. **Formatting conventions**
+   - Bold key technical terms on first mention
+   - Use `inline code` for function names, variables, file paths
+
+6. **Inline emphasis** — Highlight the most important points per section
+   - Preserve ALL existing `{red:...}`, `**bold**`, `*italic*` exactly
+   - Add new emphasis sparingly — 1–3 instances per section maximum:
+     - `**bold**` — key technical terms, lead-in labels in lists
+     - `*italic*` — terms being defined, foreign phrases, titles
+     - `{red:text}` — critical constraints, warnings, things the reader must not miss
+     - `{red:**text**}` — the single most important conclusion; use at most once or twice total
+   - Never bold/red entire sentences — mark only the specific phrase or term
+
+7. **Factual corrections** — Fix identified errors from Task 3
+
+8. **Description completion** — Flesh out incomplete sections
+   - Add only information that is clearly implied or factually obvious
+   - Do NOT fabricate details or add your own opinions
+
+**What NOT to change:**
+- Author's tone and voice (colorful language is intentional)
+- Existing emphasis (`{red:...}`, bold)
+- Section scope (don't merge or split sections)
+- Technical examples and code snippets (preserve exactly)
+- Author's analogies and explanations
+- Length (don't pad sections)
+- Author's personal insights or recommendations
+
+Produce the **complete optimized markdown**. Do NOT output a diff — output the full document.
+
+#### Task 5: Write to Feishu
+
+Determine the page title:
+- Use the document's first H1 heading if present
+- Otherwise, derive a clean title from the filename (strip path, underscores → spaces, drop `.md`)
+
+Write the optimized content as a new sub-page under `PARENT_URL`:
+
+```bash
+python <skill-directory>/scripts/feishu_tool.py write PARENT_URL --heading-color --title "TITLE" <<'FEISHU_EOF'
+[full optimized markdown content here — NO H1 line]
+FEISHU_EOF
+```
+
+**Important notes:**
+- Always include `--heading-color` to auto-color headings by depth
+- **Do NOT include the `# Title` H1 line in the heredoc body.** The title is set via `--title`. If H1 is in the body, heading depths shift by 1 and all headings get the wrong color.
+- Use `<<'FEISHU_EOF'` (quoted delimiter) to prevent variable expansion
+- If the content contains the literal string `FEISHU_EOF` on its own line, use a different delimiter (e.g., `<<'MD_UPLOAD_END'`)
+
+The script prints the URL of the newly created page. **Share this URL with the user.**
+
+#### Post-upload verification (optional)
+
+```bash
+python <skill-directory>/scripts/feishu_tool.py read NEW_PAGE_URL
+```
+
+### Summary Report
+
+After completing all tasks, provide the user with:
+
+1. **URL** of the new page
+2. **Changes made** — brief list of formatting improvements applied
+3. **Confidence level** — how confident you are in the changes
 
 ---
 
@@ -236,7 +421,7 @@ The optimized document should be **80%+ identical** to the original. Changes sho
      > **Code**: [GitHub](url)
      >
      ```
-   - If the source already has an intro `|>` quote container, move its text into the callout children and remove the `|>` block
+   - If the source already has an intro `|>` quote container or a plain `>` blockquote that functions as the document summary (e.g., `> 一句话总结: ...`), move its text into the callout as a child paragraph and remove the original block
 
 2. **Heading restructuring** — Fix numbering AND hierarchy when needed:
    - Apply **continuous sequential numbering** across the whole document (`## 1`, `## 2`, `## 3`…), not per-section resets
