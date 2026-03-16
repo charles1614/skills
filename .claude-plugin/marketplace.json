@@ -43,12 +43,13 @@
     },
     {
       "name": "charles-skills",
-      "description": "Custom skills by Charles: architecture documentation and academic paper analysis",
+      "description": "Custom skills by Charles: architecture documentation, academic paper analysis, and Feishu wiki tools",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/create-deepwiki",
-        "./skills/paper-reader"
+        "./skills/paper-reader",
+        "./skills/feishu"
       ]
     }
     ,
