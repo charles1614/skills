@@ -111,15 +111,21 @@ Create a new Feishu wiki page from markdown content.
 | `` `code` `` | Inline code |
 | `~~text~~` | Strikethrough |
 | `[label](url)` | Link |
-| `{red:text}` | **Red text** (`text_color=1`) |
-| `{red:**text**}` | **Red bold** — key emphasis |
+| `{red:text}` | 🔴 **Red text color** — use liberally for key points (10–20× per document) |
+| `{red:**text**}` | 🔴 **Red bold text** — highest emphasis for critical conclusions |
+| `{green:text}` | 🟢 Green background highlight |
+| `{green:**text**}` | 🟢 Green highlight + bold — key concept first mention |
+| `{yellow:text}` | 🟡 Yellow background highlight |
+| `{orange:text}` | 🟠 Orange background highlight |
+| `{blue:text}` | 🔵 Blue background highlight |
+| `{purple:text}` | 🟣 Purple background highlight |
 
 ### Notes
 - New page is created as a child (sub-node) of the parent.
 - If `--title` is omitted, title is extracted from the first H1.
 - The `MARKDOWN` delimiter must be quoted (`'MARKDOWN'`) to prevent variable expansion.
-- Supported: headings, paragraphs, bold, italic, code, strikethrough, links, bullet/ordered lists, code blocks, blockquotes, dividers, **tables** (`| col | col |` pipe format), callout blocks, quote containers (`|>` prefix), LaTeX equations.
-- Images are not yet supported for write-back.
+- Supported: headings, paragraphs, bold, italic, code, strikethrough, links, bullet/ordered lists, code blocks, blockquotes, dividers, **tables** (`| col | col |` pipe format), callout blocks, quote containers (`|>` prefix), LaTeX equations, **images**.
+- **Images**: Use `![alt](path)` in markdown. Pass `--image-dir DIR` to resolve relative image paths. Images are uploaded after block creation. If `--image-dir` is omitted, image lines are treated as text.
 
 ---
 
@@ -173,10 +179,10 @@ Check the document against these specific format conventions:
 | Numbered headings | `## 1 标题` / `### 1.1 子标题` | Correct numbering? Duplicates? |
 | Heading groups | Continuous numbering across whole doc (no resets) | Multiple `## 1` resets? |
 | Level conflicts | Group/chapter titles at correct level vs. sub-items | Any group title at same level as children? |
-| Key concept callouts | `\|>` quote containers for key insights | Used where appropriate? |
+| Callouts/quotes | `\|>` / `[!callout]` / `> 📌` freely throughout (5–15 per long doc) | Enough callouts? TL;DR blocks styled? |
 | Code block tags | Language tag on every code block | Any bare ` ``` `? |
 | Bold key terms | First mention of important technical terms bolded | Applied? |
-| Inline emphasis | `{red:...}` for critical constraints; `{red:**...**}` for most important conclusion | Used sparingly? |
+| Inline emphasis | `{red:...}` / `{red:**...**}` for key points (10–20× in a long doc); `{green:...}` for first-mention key terms (5–10×) | Enough red text? |
 | LaTeX equations | `$inline$` and `$$display$$` | Correct syntax? |
 
 **Important**: Only note FORMAT differences. Do not evaluate content topics.
@@ -221,6 +227,7 @@ Read [`references/conservative-edits.md`](<skill-directory>/references/conservat
 
 2. **Heading restructuring** — Fix numbering AND hierarchy when needed:
    - Apply **continuous sequential numbering** across the whole document (`## 1`, `## 2`, `## 3`…), not per-section resets
+   - **Number format**: Always use `## 1 Title` (number then space then title — **no period** after the number). The upload tool automatically colors the numeric prefix blue. Format `## 1. Title` (period after number) will NOT trigger auto-blue coloring.
    - **Heading groups**: If multiple sections each restart at "1.", "2."… choose:
      - *Elevate the group header*: if a heading logically contains sub-items also at the same level, promote it one level up
      - *Continuous renumber*: if no clear group header, renumber all items sequentially
@@ -228,9 +235,12 @@ Read [`references/conservative-edits.md`](<skill-directory>/references/conservat
    - **Renaming allowed**: you MAY revise a heading's title when it's too generic — keep the core topic, just improve precision
    - **Reordering allowed**: you MAY reorder sections when the logical flow clearly improves (note each reorder in the summary)
 
-3. **Key concept callouts** — match the document's existing callout style (`|>` or `>`)
-   - Only where the document already emphasizes something but doesn't use callout format
-   - Do NOT add callouts around content that wasn't emphasized in the original
+3. **Callouts and quote containers — use freely throughout the document**
+   - **TL;DR blocks** → always convert to **blue callout**: `[!callout icon=bulb bg=2 border=2]` (NOT a `|>` quote container)
+   - **"一句话总结" / "一句话定位" / "核心思想" / "关键结论"** → always convert to **green callout**: `[!callout icon=pushpin bg=3 border=3]` (NOT a `|>` quote container)
+   - Add `|>` quote containers for other key insights, important observations, counterintuitive findings, and critical design decisions — no upper limit
+   - Add `> 📌 **标题**: ...` blockquotes for critical facts and must-not-miss design decisions
+   - A well-formatted long document should have **5–15 callouts/quote containers** spread across sections
 
 4. **Code block language tags** — Add missing language tags to bare code blocks
 
@@ -238,20 +248,37 @@ Read [`references/conservative-edits.md`](<skill-directory>/references/conservat
    - Bold key technical terms on first mention
    - Use `inline code` for function names, variables, file paths
 
-6. **Inline emphasis** — Highlight the most important points per section
-   - Preserve ALL existing `{red:...}`, `**bold**`, `*italic*` exactly
-   - Add new emphasis sparingly — 1–3 instances per section maximum:
-     - `**bold**` — key technical terms, lead-in labels in lists
-     - `*italic*` — terms being defined, foreign phrases, titles
-     - `{red:text}` — critical constraints, warnings, things the reader must not miss
-     - `{red:**text**}` — the single most important conclusion; use at most once or twice total
-   - Never bold/red entire sentences — mark only the specific phrase or term
+6. **Inline emphasis — MANDATORY**
+
+   **You MUST add these — a document with no color markup is incomplete:**
+   - `{red:text}` / `{red:**text**}` — **red text color**, use **liberally throughout** the document. Every key conclusion, important value, critical fact, must-not-miss point should be red. A long technical paper needs 10–20 red instances across sections. `{red:**...**}` for the most critical items.
+   - `{green:text}` / `{green:**text**}` — **green background highlight** for key technical concepts, system names, method names on **first mention** in body text (5–10 per document)
+
+   **Other emphasis:**
+   - `{yellow:text}`, `{orange:text}`, `{blue:text}`, `{purple:text}` — background highlights for secondary emphasis
+   - `**bold**` — key technical terms, list lead-ins, first-mention important terms
+   - `*italic*` — terms being defined, foreign phrases, titles
+
+   **Structural emphasis for scannability:**
+   - **Bold structural signposts**: Bold ALL "在...方面" / "在...上" phrases that introduce a topic shift — e.g., "在内存优化方面" → "**在内存优化方面**", "在通信方面" → "**在通信方面**". Also bold: "**从...角度**", "**具体来说**", "**值得注意的是**", "**核心区别在于**"
+   - **Bold enumeration lead-ins**: When a paragraph lists items inline (A does X, B does Y, C does Z), bold each item name: "**A** does X, **B** does Y, **C** does Z"
+   - **Green-highlight enumerated technique names**: When a paragraph enumerates multiple technical techniques with Chinese glosses (e.g., "通过 selective recomputation（选择性重计算）、fine-grained activation offloading（细粒度激活卸载）和 precision-aware optimizer"), apply `{green:...}` to each technique name on first mention: `通过 {green:selective recomputation}（选择性重计算）、{green:fine-grained activation offloading}（细粒度激活卸载）和 {green:precision-aware optimizer}`
+   - **Red for full conclusions**: Red should mark the complete actionable finding, not just a number. Bad: `{red:199.5 GB}`. Good: `{red:将内存需求从 199.5 GB 降至 80 GB 以下}`. Each section should have 1–2 red sentences.
+
+   Rules:
+   - Preserve ALL existing `{red:...}`, `{green:...}`, `**bold**`, `*italic*` exactly
+   - Never mark entire paragraphs — but DO mark full key sentences/clauses that a reader must not miss
 
 7. **Factual corrections** — Fix identified errors from Task 3
 
 8. **Description completion** — Flesh out incomplete sections
    - Add only information that is clearly implied or factually obvious
    - Do NOT fabricate details or add your own opinions
+
+9. **Intelligent list conversion** — Dense paragraphs that enumerate items should be broken into structured lists:
+   - **When to convert**: A paragraph listing 3+ items/features/components with descriptions, separated by 、/；/semicolons, or using "A: desc, B: desc, C: desc" structure
+   - **Format**: Bullet list with bold lead-ins: `- **ItemName**: description`
+   - **When NOT to convert**: Items are very short (1–2 words) with no descriptions — keep as inline list. Also keep as paragraph if the enumeration is embedded in narrative flow.
 
 **What NOT to change:**
 - Author's tone and voice (colorful language is intentional)
@@ -270,16 +297,21 @@ Determine the page title:
 - Use the document's first H1 heading if present
 - Otherwise, derive a clean title from the filename (strip path, underscores → spaces, drop `.md`)
 
+Determine the image directory:
+- If the markdown file references images with relative paths (e.g., `![](figures/fig1.png)`), set `IMAGE_DIR` to the directory containing the markdown file
+- If images use absolute paths or the document has no images, omit `--image-dir`
+
 Write the optimized content as a new sub-page under `PARENT_URL`:
 
 ```bash
-python <skill-directory>/scripts/feishu_tool.py write PARENT_URL --heading-color --title "TITLE" <<'FEISHU_EOF'
+python <skill-directory>/scripts/feishu_tool.py write PARENT_URL --heading-color --image-dir "IMAGE_DIR" --title "TITLE" <<'FEISHU_EOF'
 [full optimized markdown content here — NO H1 line]
 FEISHU_EOF
 ```
 
 **Important notes:**
 - Always include `--heading-color` to auto-color headings by depth
+- Include `--image-dir` pointing to the markdown file's parent directory when images are present
 - **Do NOT include the `# Title` H1 line in the heredoc body.** The title is set via `--title`. If H1 is in the body, heading depths shift by 1 and all headings get the wrong color.
 - Use `<<'FEISHU_EOF'` (quoted delimiter) to prevent variable expansion
 - If the content contains the literal string `FEISHU_EOF` on its own line, use a different delimiter (e.g., `<<'MD_UPLOAD_END'`)
@@ -371,10 +403,10 @@ Check the source document against these specific format conventions:
 | Numbered headings | `## 1 标题` / `### 1.1 子标题` | Correct numbering? Duplicates? |
 | Heading groups | No section resets — numbering is continuous across whole doc | Multiple `## 1` resets? |
 | Level conflicts | Group/chapter titles at correct level vs. their sub-items | Any group title at same level as children? |
-| Key concept callouts | `\|>` quote containers for key insights | Used where appropriate? |
+| Callouts/quotes | `\|>` / `[!callout]` / `> 📌` freely throughout (5–15 per long doc) | Enough callouts? TL;DR blocks styled? |
 | Code block tags | Language tag on every code block | Any bare ` ``` `? |
 | Bold key terms | First mention of important technical terms bolded | Applied? |
-| Inline emphasis | `{red:...}` for critical constraints; `{red:**...**}` for most important conclusion | Used sparingly? |
+| Inline emphasis | `{red:...}` / `{red:**...**}` for key points (10–20× in a long doc); `{green:...}` for first-mention key terms (5–10×) | Enough red text? |
 | LaTeX equations | `$inline$` and `$$display$$` | Correct syntax? |
 
 **Important**: Only note FORMAT differences. Do not compare content topics.
@@ -425,6 +457,7 @@ The optimized document should be **80%+ identical** to the original. Changes sho
 
 2. **Heading restructuring** — Fix numbering AND hierarchy when needed:
    - Apply **continuous sequential numbering** across the whole document (`## 1`, `## 2`, `## 3`…), not per-section resets
+   - **Number format**: Always use `## 1 Title` (number then space then title — **no period** after the number). The upload tool automatically colors the numeric prefix blue. Format `## 1. Title` (period after number) will NOT trigger auto-blue coloring.
    - **Heading groups**: If multiple independent sections each restart at "1.", "2."…, choose a fix:
      - *Elevate the group header*: if a heading like `## 深度推导：…` logically contains sub-items also at `##`, promote it to `#` and demote sub-items to `##`
      - *Continuous renumber*: if no clear group header exists, renumber all items sequentially (1, 2, 3, 4…)
@@ -432,9 +465,12 @@ The optimized document should be **80%+ identical** to the original. Changes sho
    - **Renaming allowed**: you MAY revise a heading's title when it's too generic or doesn't capture the actual scope — keep the core topic, just improve precision
    - **Reordering allowed**: you MAY reorder sections when the logical flow clearly improves (e.g., prerequisite concepts before dependent ones) — note each reorder in the summary report
 
-3. **Key concept callouts** — match the source document's existing callout style (`|>` or `>`)
-   - Only where the source already emphasizes something but doesn't use callout format
-   - Do NOT add callouts around content that wasn't emphasized in the original
+3. **Callouts and quote containers — use freely throughout the document**
+   - **TL;DR blocks** → always convert to **blue callout**: `[!callout icon=bulb bg=2 border=2]` (NOT a `|>` quote container)
+   - **"一句话总结" / "一句话定位" / "核心思想" / "关键结论"** → always convert to **green callout**: `[!callout icon=pushpin bg=3 border=3]` (NOT a `|>` quote container)
+   - Add `|>` quote containers for other key insights, important observations, counterintuitive findings, and critical design decisions — no upper limit
+   - Add `> 📌 **标题**: ...` blockquotes for critical facts and must-not-miss design decisions
+   - A well-formatted long document should have **5–15 callouts/quote containers** spread across sections
 
 4. **Code block language tags** — Add missing language tags to bare code blocks
 
@@ -442,21 +478,32 @@ The optimized document should be **80%+ identical** to the original. Changes sho
    - Bold key technical terms on first mention
    - Use `inline code` for function names, variables, file paths
 
-6. **Inline emphasis** — Extract and highlight the most important points per section
-   - Preserve ALL existing `{red:...}`, `**bold**`, `*italic*` from the source exactly
-   - Add new emphasis sparingly — 1–3 instances per section maximum:
-     - `**bold**` — key technical terms, lead-in labels in lists
-     - `*italic*` — terms being defined, foreign phrases, titles
-     - `{red:text}` — critical constraints, warnings, things the reader must not miss
-     - `{red:**text**}` — the single most important conclusion or insight in the document; use at most once or twice total
-   - Ask: *would a reader skimming this document immediately understand the core point?* If not, add one emphasis
-   - Never bold/red entire sentences — mark only the specific phrase or term
+6. **Inline emphasis — MANDATORY**
+   - Preserve ALL existing `{red:...}`, `{green:...}`, `**bold**`, `*italic*` from the source exactly
+   - `{red:text}` / `{red:**text**}` — **red text color**, use **liberally throughout** (10–20× for a long technical paper). Mark key conclusions, important values, critical facts in every section.
+   - `{green:text}` / `{green:**text**}` — **green background highlight** for key technical concepts/system names on first mention (5–10×)
+   - `**bold**` — key technical terms, lead-in labels in lists
+   - `*italic*` — terms being defined, foreign phrases, titles
+
+   **Structural emphasis for scannability:**
+   - **Bold structural signposts**: Bold ALL "在...方面" / "在...上" phrases that introduce a topic shift — e.g., "在内存优化方面" → "**在内存优化方面**", "在通信方面" → "**在通信方面**". Also bold: "**从...角度**", "**具体来说**", "**值得注意的是**", "**核心区别在于**"
+   - **Bold enumeration lead-ins**: When a paragraph lists items inline, bold each item name
+   - **Green-highlight enumerated technique names**: When a paragraph enumerates multiple technical techniques with Chinese glosses (e.g., "通过 A（中文A）、B（中文B）和 C"), apply `{green:...}` to each technique name on first mention
+   - **Red for full conclusions**: Mark the complete finding, not just a number. Each section should have 1–2 red sentences.
+
+   Rules:
+   - Never mark entire paragraphs — but DO mark full key sentences/clauses that a reader must not miss
 
 7. **Factual corrections** — Fix identified errors from Task 4
 
 8. **Description completion** — Flesh out incomplete sections
    - Add only information that is clearly implied or factually obvious
    - Do NOT fabricate details or add your own opinions
+
+9. **Intelligent list conversion** — Dense paragraphs that enumerate items should be broken into structured lists:
+   - **When to convert**: A paragraph listing 3+ items/features/components with descriptions, separated by 、/；/semicolons
+   - **Format**: Bullet list with bold lead-ins: `- **ItemName**: description`
+   - **When NOT to convert**: Items are very short with no descriptions, or the enumeration is embedded in narrative flow
 
 #### What NOT to change:
 

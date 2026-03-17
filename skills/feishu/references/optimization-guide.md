@@ -30,10 +30,25 @@ Numbers are part of the heading text, not auto-generated. Ensure numbering is se
 
 ### Callout Blocks for Key Concepts
 
-Important concepts, prerequisites, or highlights use blockquote callouts with emoji markers:
-- 📌 for key points and important notes
-- 📚 for background knowledge or prerequisites
-- Other emoji as appropriate for the context
+Use callout blocks and blockquotes **freely throughout the document** wherever content benefits from visual separation. There is no upper limit — use as many as the content warrants.
+
+Forms available:
+- `> 📌 **标题**: ...` — key insight, critical fact, must-not-miss design decision
+- `> 📚 **背景**: ...` — background knowledge or prerequisites
+- `[!callout icon=bulb bg=2 border=2]` — **blue callout** for TL;DR / section-opening summaries (use this, NOT `|>`)
+- `[!callout icon=pushpin bg=3 border=3]` — **green callout** for "一句话总结" / "一句话定位" / "核心思想" (use this, NOT `|>`)
+- `[!callout icon=X bg=N border=N]` — Feishu-native callout box for document-opening summary
+- `|>` quote container — other key insights, observations, comparisons
+- `> plain blockquote` — any observation, comparison, or summary that benefits from visual grouping
+
+When to use:
+- Counterintuitive design decisions and the reasoning behind them
+- Critical constraints or caveats readers must not miss
+- "Why does this work" explanations that could be glossed over
+- Any important conclusion or result that should stand out visually
+- Section-internal summaries, comparisons, observations
+
+**Density guideline**: A long technical document (20+ sections) should have **5–15 callout/blockquote instances** spread throughout. If the document has fewer than 5 visual call-outs, you are being too conservative. Wrap `> TL;DR:` blocks, "一句话定位/总结" paragraphs, and key design insight paragraphs.
 
 Example:
 ```markdown
@@ -109,18 +124,59 @@ A document has a **heading group conflict** when:
 
 ## 3. Text Formatting
 
+### Color System (MANDATORY)
+
+| Syntax | Feishu rendering | When to use |
+|--------|-----------------|-------------|
+| `{red:text}` | 🔴 Red font color | Key conclusions, important values, must-not-miss facts — **use liberally throughout the document** (10–20× for a long technical paper) |
+| `{red:**text**}` | 🔴 Red bold font | Most critical items — conclusions, peak results, key constraints |
+| `{green:text}` | 🟢 Green background highlight | Key technical term or system name on **first mention** in body text |
+| `{green:**text**}` | 🟢 Green highlight + bold | Core technical concept first mention, extra emphasis |
+| `{yellow:text}` | 🟡 Yellow background highlight | Secondary emphasis, caveats, conditions |
+| `{orange:text}` | 🟠 Orange background highlight | Additional emphasis |
+| `{blue:text}` | 🔵 Blue background highlight | Additional emphasis |
+| `{purple:text}` | 🟣 Purple background highlight | Additional emphasis |
+
+### Emphasis Rules (MANDATORY — every upload must include these)
+
+1. **Red text** — You MUST use `{red:...}` and `{red:**...**}` **liberally throughout the document**. A long technical paper needs 10–20 red text instances spread across sections — not just 1–2. Goal: a skimming reader immediately sees red markers at every key point.
+
+   **Granularity: cover full sentences, not just words or numbers.** Mark the entire key sentence or clause — the one a reader must not miss. Do not isolate just a number or a single noun:
+   - ❌ `将内存从 {red:199.5 GB} 降至 80 GB` — the number alone is useless without context
+   - ✅ `{red:将 DeepSeek-V3 的单 GPU 内存需求从 199.5 GB 降至 80 GB 以下}` — the full conclusion is highlighted
+   - ❌ `GB200/GB300 相比 H100 实现约 {red:3×} token 吞吐提升` — the multiplier alone is not actionable
+   - ✅ `{red:GB200/GB300 相比 H100 实现约 3× token 吞吐提升}` — the full finding is self-contained
+
+2. **Green highlight** — You MUST add `{green:...}` to each key technical concept, system name, or method name on **first mention** in body text (not in headings). Aim for 5–10 per document.
+
+3. **Bold** — Use `**term**` for all first-mention important terms, list lead-ins, and inline sub-section headings.
+
+4. **Structural signpost phrases** — Bold phrases that function as paragraph-level topic labels. These help readers scan sections without reading every word:
+   - **"在...方面" phrases are mandatory**: Always bold "在内存优化方面" → "**在内存优化方面**", "在通信方面" → "**在通信方面**", "在计算效率方面" → "**在计算效率方面**", etc.
+   - Other patterns: "**从...角度**", "**关于...**", "**具体来说**", "**值得注意的是**", "**核心区别在于**", "**本质上**"
+   - Enumeration lead-ins: when a paragraph lists 3+ items inline, bold each item's name/label
+   - Transitional lead-ins: "**首先**", "**其次**", "**最后**", "**一方面...另一方面**" when used as paragraph openers
+   - These are NOT red (not conclusions) and NOT green (not technical terms) — just plain bold for structure
+
+5. **Green-highlight enumerated technique names** — When a paragraph enumerates multiple technical techniques with Chinese glosses (e.g., "通过 selective recomputation（选择性重计算）、fine-grained activation offloading（细粒度激活卸载）和 precision-aware optimizer"), apply `{green:...}` to each technique name on first mention:
+   - ✅ `通过 {green:selective recomputation}（选择性重计算）、{green:fine-grained activation offloading}（细粒度激活卸载）和 {green:precision-aware optimizer}`
+   - This applies to any "A（中文A）、B（中文B）和 C" enumeration pattern where each item is a distinct technique
+
+5. **LaTeX compatibility** — **NEVER place a LaTeX math expression (`$...$` or `$$...$$`) inside a color marker.** The inline equation parser and the color parser conflict, causing the formula to lose color or render incorrectly. If the phrase you want to highlight contains a formula, split the color around it:
+   - ❌ `{red:打破传统 $\text{EP}\leq\text{DP}$ 约束}`
+   - ✅ `{red:打破传统} $\text{EP}\leq\text{DP}$ {red:约束}`
+   - For simple math that can be written without LaTeX (e.g., `18×`), use the Unicode symbol directly inside the color marker: `{red:18× 差距}`
+
+### Other formatting
+
 | Convention | Reference pattern | Apply to source? |
 |-----------|-------------------|-----------------|
-| **Bold** for key terms | First mention of important concepts bolded | Yes, if clearly a pattern |
+| **Bold** for key terms | First mention of important concepts bolded | Yes, systematically |
 | `inline code` | Used for function names, variables, paths | Match reference usage |
 | Callout blocks (`\|>`) | Quote containers for key insights | Add where appropriate |
-| `{red:text}` | Critical constraints / must-not-miss warnings | Add very sparingly |
-| `{red:**text**}` | Single most important conclusion in document | At most 1–2 total |
 | `*italic*` | Terms being defined, foreign phrases | Match reference usage |
 
-**When to adjust**: Bold key technical terms on first use. Use code formatting for identifiers. Add `{red:...}` only for genuinely critical information a skimming reader must not miss.
-
-**When NOT to adjust**: Don't add bold/italic that changes emphasis the author didn't intend. Never bold entire sentences. Preserve all existing emphasis exactly.
+**When NOT to adjust**: Don't add bold/italic that changes emphasis the author didn't intend. Never bold entire paragraphs — but DO bold structural signpost phrases and enumeration lead-ins for scannability. Preserve all existing emphasis exactly.
 
 ## 4. List Conventions
 
@@ -140,6 +196,28 @@ When source uses bold-paragraph headers for sequential steps (e.g., `**第一步
 - **Short items** (≤1 sentence per step) → convert to numbered list: `1. **第一步**：...`
 - **Long prose or equations per step** → keep as bold-paragraph headers; nesting multi-paragraph content under list items is awkward in Feishu
 - **Never use bullet lists** for sequential steps — order matters
+
+### Dense Enumeration Paragraphs
+
+When a paragraph enumerates 3+ items with descriptions (separated by 、；, or similar), convert to a bullet list for readability:
+
+**Convert when:**
+- Paragraph lists 3+ named items each with a description/explanation
+- Items are separated by Chinese punctuation (、；。) or semicolons
+- Each item has enough substance (a phrase or clause, not just a word)
+
+**Keep as paragraph when:**
+- Items are bare terms without descriptions (e.g., "支持 CUDA、ROCm、Metal 三种后端")
+- The enumeration is part of a flowing argument/narrative
+- Total list would be only 2 items
+
+**Format:**
+```markdown
+- **ItemName**: description of what it does
+- **ItemName**: description of what it does
+```
+
+Lead-in sentence stays as a paragraph above the list. Each item gets a bold label and colon separator.
 
 ## 5. Code Blocks
 
@@ -162,7 +240,7 @@ When source uses bold-paragraph headers for sequential steps (e.g., `**第一步
 
 | Element | Reference pattern |
 |---------|------------------|
-| Blockquotes (`>`) | 📌/📚 callouts for key points and prerequisites |
+| Blockquotes (`>`) | 📌/📚/TL;DR callouts — use freely for key points, section summaries, insights |
 | LaTeX equations | Display math with `$$`, inline with `$` |
 
 ---

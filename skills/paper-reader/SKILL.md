@@ -257,6 +257,7 @@ Apply these transformations to the `.tex` content:
 | `\begin{itemize}` ... `\item X` | `- X` |
 | `\begin{enumerate}` ... `\item X` | `1. X` |
 | `\begin{keyinsight}[TL;DR]` ... `\end{keyinsight}` | `> TL;DR: ...` |
+| `\begin{keyinsight}[📌 标题]` ... `\end{keyinsight}` | `> 📌 **标题**: ...` |
 | `\begin{strengthbox}` / `\begin{weaknessbox}` | keep as bullet lists |
 | `\begin{mathbox}[Title]` ... `\end{mathbox}` | `$$...$$` with equations |
 | `\begin{equation}` ... `\end{equation}` | `$$...$$` |
