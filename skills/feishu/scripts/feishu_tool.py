@@ -19,6 +19,7 @@ import argparse
 import copy as _copy
 import concurrent.futures
 import hashlib
+import io
 import json
 import logging
 import os
@@ -55,6 +56,8 @@ class WriteResult:
     bg_patches_failed: int = 0
     table_patches_ok: int = 0
     table_patches_failed: int = 0
+    images_uploaded: int = 0
+    images_failed: int = 0
     cleanup_deleted: int = 0
 
 
@@ -1825,12 +1828,17 @@ def _render_elements(elements: list[dict], raw: bool = False) -> str:
                     text = f"~~{text}~~"
                 if link_url:
                     text = f"[{text}]({link_url})"
-                # Text color annotations
+                # {red:...} = text_color=1; other colors = background_color highlights
                 tc = style.get("text_color")
                 if tc == 1:
                     text = f"{{red:{text}}}"
                 elif tc and tc not in (0, 5):
                     text = f"{{color={tc}:{text}}}"
+                else:
+                    _BG_REV = {v: k for k, v in _BG_COLOR_MAP.items()}
+                    bc = style.get("background_color")
+                    if bc and bc in _BG_REV:
+                        text = f"{{{_BG_REV[bc]}:{text}}}"
             parts.append(text)
         elif "mention_doc" in elem:
             doc = elem["mention_doc"]
@@ -1971,12 +1979,21 @@ REVERSE_LANG_MAP.update({"py": 49, "js": 31, "ts": 61, "sh": 7, "shell": 7, "yml
 _INLINE_PATTERNS = [
     ("code", re.compile(r"`([^`]+)`")),
     ("red", re.compile(r"\{red:(.+?)\}")),
+    ("green", re.compile(r"\{green:(.+?)\}")),
+    ("yellow", re.compile(r"\{yellow:(.+?)\}")),
+    ("orange", re.compile(r"\{orange:(.+?)\}")),
+    ("blue", re.compile(r"\{blue:(.+?)\}")),
+    ("purple", re.compile(r"\{purple:(.+?)\}")),
     ("equation", re.compile(r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)")),
     ("link", re.compile(r"\[([^\]]+)\]\(([^)]+)\)")),
     ("bold", re.compile(r"\*\*(.+?)\*\*")),
     ("italic", re.compile(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)")),
     ("strike", re.compile(r"~~(.+?)~~")),
 ]
+
+# {red:...} → text_color=1 (red font color); use liberally for key points throughout a document.
+# Other colors → background_color (text highlight/background, like a highlighter pen).
+_BG_COLOR_MAP = {"green": 4, "yellow": 3, "orange": 2, "blue": 5, "purple": 6}
 
 
 def _emit(text: str, style: dict, elements: list[dict]) -> None:
@@ -2012,6 +2029,9 @@ def _parse_inline_recursive(
             _emit(best_match.group(1), style, elements)
         elif best_kind == "red":
             style = {**inherited_style, "text_color": 1}
+            _parse_inline_recursive(best_match.group(1), style, elements)
+        elif best_kind in ("green", "yellow", "orange", "blue", "purple"):
+            style = {**inherited_style, "background_color": _BG_COLOR_MAP[best_kind]}
             _parse_inline_recursive(best_match.group(1), style, elements)
         elif best_kind == "equation":
             elements.append({"equation": {"content": best_match.group(1).strip(),
@@ -2292,7 +2312,7 @@ def _parse_list(
     return tree, i
 
 
-def markdown_to_blocks(md_text: str, auto_heading_color: bool = False) -> list[dict]:
+def markdown_to_blocks(md_text: str, auto_heading_color: bool = False, image_dir: str = "") -> list[dict]:
     """Convert markdown text to a list of Feishu block dicts.
 
     If ``auto_heading_color`` is True, heading backgrounds are automatically
@@ -2493,6 +2513,29 @@ def markdown_to_blocks(md_text: str, auto_heading_color: bool = False) -> list[d
             i += 1
             continue
 
+        # Image: ![alt](path) on a standalone line
+        img_m = re.match(r'^!\[([^\]]*)\]\(([^)]+)\)$', stripped)
+        if img_m and image_dir:
+            img_path = img_m.group(2)
+            if not os.path.isabs(img_path):
+                img_path = os.path.join(image_dir, img_path)
+            if os.path.isfile(img_path):
+                with open(img_path, "rb") as f:
+                    img_bytes = f.read()
+                w, h = 0, 0
+                try:
+                    from PIL import Image as PILImage
+                    pil_im = PILImage.open(io.BytesIO(img_bytes))
+                    w, h = pil_im.size
+                except Exception:
+                    pass
+                blocks.append({"block_type": 27, "image": {},
+                               "_image_data": img_bytes, "_image_width": w, "_image_height": h})
+                i += 1
+                continue
+            else:
+                log.warning("Image file not found: %s", img_path)
+
         # Paragraph — collect consecutive non-special lines
         para_lines: list[str] = []
         while i < len(lines):
@@ -2512,6 +2555,7 @@ def markdown_to_blocks(md_text: str, auto_heading_color: bool = False) -> list[d
                 or re.match(r"^(\s*)[-*+]\s+", cl)
                 or re.match(r"^(\s*)\d+\.\s+", cl)
                 or re.match(r"^\s*\$[^$]+\$\s*$", cs)
+                or re.match(r'^!\[([^\]]*)\]\(([^)]+)\)$', cs)
             ):
                 break
             para_lines.append(cs)
@@ -2549,6 +2593,7 @@ def write_blocks_to_doc(
             children_map: list[list[dict] | None] = []
             table_cells_map: list[list[list[dict]] | None] = []
             bg_color_map: list[str | None] = []
+            image_data_map: list[dict | None] = []
             for b in block_list:
                 children = b.pop("_children", None)
                 children_map.append(children)
@@ -2556,6 +2601,18 @@ def write_blocks_to_doc(
                 table_cells_map.append(table_cells)
                 bg_color = b.pop("_bg_color", None)
                 bg_color_map.append(bg_color)
+                img_info = None
+                if b.get("_image_data"):
+                    img_info = {
+                        "data": b.pop("_image_data"),
+                        "width": b.pop("_image_width", 0),
+                        "height": b.pop("_image_height", 0),
+                    }
+                else:
+                    b.pop("_image_data", None)
+                    b.pop("_image_width", None)
+                    b.pop("_image_height", None)
+                image_data_map.append(img_info)
                 clean_blocks.append(b)
 
             # Create in batches of 10
@@ -2569,6 +2626,21 @@ def write_blocks_to_doc(
                 result.blocks_created += len(created)
                 result.blocks_failed += len(batch) - len(created)
                 insert_pos += len(created)
+
+                # Upload images for image blocks in this batch
+                batch_images = image_data_map[batch_start : batch_start + 10]
+                for j, new_blk in enumerate(created):
+                    if j < len(batch_images) and batch_images[j] and new_blk.get("block_id"):
+                        info = batch_images[j]
+                        try:
+                            upload_image_to_block(
+                                user_token, doc_id, new_blk["block_id"],
+                                info["data"], width=info["width"], height=info["height"],
+                            )
+                            result.images_uploaded += 1
+                        except Exception as e:
+                            result.images_failed += 1
+                            log.warning("  Image upload failed for block %s: %s", new_blk["block_id"], e)
 
                 batch_bg = bg_color_map[batch_start : batch_start + 10]
                 for j, new_blk in enumerate(created):
@@ -2719,7 +2791,8 @@ def cmd_write(args: argparse.Namespace) -> None:
         title = m.group(1).strip() if m else "Untitled"
 
     log.info("Creating wiki page: %s", title)
-    blocks = markdown_to_blocks(md_text, auto_heading_color=getattr(args, "heading_color", False))
+    blocks = markdown_to_blocks(md_text, auto_heading_color=getattr(args, "heading_color", False),
+                               image_dir=getattr(args, "image_dir", "") or "")
     blocks_parsed = len(blocks)
     # Skip the first block if it's a heading matching the title (avoid duplicate)
     if blocks and blocks[0].get("block_type") == 3:
@@ -2749,9 +2822,11 @@ def cmd_write(args: argparse.Namespace) -> None:
         print(f"  Heading BG     : {result.bg_patches_ok} ok, {result.bg_patches_failed} failed", file=sys.stderr)
     if deferred_tbl := result.table_patches_ok + result.table_patches_failed:
         print(f"  Table patches  : {result.table_patches_ok} ok, {result.table_patches_failed} failed", file=sys.stderr)
+    if result.images_uploaded or result.images_failed:
+        print(f"  Images         : {result.images_uploaded} ok, {result.images_failed} failed", file=sys.stderr)
     if result.cleanup_deleted:
         print(f"  Cleanup removed: {result.cleanup_deleted} trailing empty paragraph(s)", file=sys.stderr)
-    if result.blocks_failed or result.bg_patches_failed or result.table_patches_failed:
+    if result.blocks_failed or result.bg_patches_failed or result.table_patches_failed or result.images_failed:
         print("WARNING: some operations failed — check log output above", file=sys.stderr)
 
     # ── Optional post-write verification ──────────────────────────────────────
@@ -2902,6 +2977,8 @@ def main() -> None:
     p_write.add_argument("--title", help="Page title (default: from first H1)")
     p_write.add_argument("--heading-color", action="store_true",
                          help="Auto-color heading backgrounds by depth (red→orange→yellow→…)")
+    p_write.add_argument("--image-dir",
+                         help="Directory to resolve relative image paths from (for ![alt](path) in markdown)")
     p_write.add_argument("--verify", action="store_true",
                          help="Read back the created page and verify block count after writing")
     p_write.set_defaults(func=cmd_write)
