@@ -219,7 +219,21 @@ When a paragraph enumerates 3+ items with descriptions (separated by 、；, or 
 
 Lead-in sentence stays as a paragraph above the list. Each item gets a bold label and colon separator.
 
-## 5. Code Blocks
+## 5. Tables
+
+**Feishu API hard limits — violating these causes `1770001: invalid param`:**
+
+| Limit | Value | Action if exceeded |
+|-------|-------|--------------------|
+| Max columns | **6** | Split into multiple tables or restructure as list |
+| Max rows | **8** (data rows) | Split into multiple tables |
+| Max cells | **48** (6 cols × 8 rows) | Apply both limits |
+
+**When to split**: A table with N data rows > 8 must be split. Add a heading or label before each sub-table to indicate what it covers.
+
+**When NOT to split**: Don't artificially split a 7-row table — only split when required by the limit.
+
+## 6. Code Blocks
 
 | Check | What to look for |
 |-------|-----------------|
@@ -230,13 +244,13 @@ Lead-in sentence stays as a paragraph above the list. Each item gets a bold labe
 
 **When NOT to adjust**: Don't modify actual code content.
 
-## 6. Content Density
+## 7. Content Density
 
 **When to adjust**: Complete obviously unfinished sentences. Add a brief intro to sections that jump straight into details.
 
 **When NOT to adjust**: Don't pad short sections. Brevity may be intentional.
 
-## 7. Structural Elements
+## 8. Structural Elements
 
 | Element | Reference pattern |
 |---------|------------------|

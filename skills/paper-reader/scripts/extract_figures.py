@@ -2,7 +2,7 @@
 """extract_figures.py — Smart figure extraction from academic PDFs.
 
 Uses PyMuPDF (fitz) to:
-1. Detect figure captions ("Fig. N:" / "Figure N:") with precise positions
+1. Detect figure captions ("Fig. N:" / "Figure N:" / "Figure N text") with precise positions
 2. Find associated image blocks above each caption
 3. Render just the figure region at high DPI — not the entire page
 
@@ -35,12 +35,67 @@ except ImportError:
 #   "Figure 1 |"       — arXiv/NVIDIA style
 #   "Fig. 1."          — Springer variants
 #   "FIGURE 1"         — all-caps journals
+#   "Figure 1 Text"    — space-only (Xiaomi/PKU arXiv style, no delimiter)
 CAPTION_PATTERN = re.compile(
     r"(?:Fig\.?\s*(\d+)|Figure\s+(\d+)|FIGURE\s+(\d+))"
     r"\s*(?:[a-z]|\([a-z]\))?"  # optional subfigure label: "1a", "1(a)"
     r"\s*[:.|]",               # delimiter: colon, period, or pipe
     re.IGNORECASE,
 )
+
+# Loose pattern: space-only delimiter — no punctuation after the figure number.
+# Only used when the strict pattern fails, with extra guards (short block, few lines)
+# to reject in-text references like "Figure 1 shows that...".
+CAPTION_PATTERN_LOOSE = re.compile(
+    r"^(?:Fig\.?\s*(\d+)|Figure\s+(\d+)|FIGURE\s+(\d+))"
+    r"\s*(?:[a-z]|\([a-z]\))?"  # optional subfigure label
+    r"\s+\S",                   # space then a non-whitespace character
+    re.IGNORECASE,
+)
+
+# Guards for the loose pattern — short standalone caption blocks only.
+# These guards are relaxed when the matched line is the FIRST line of the block
+# (line_idx == 0), because some PDFs merge the caption with the following body
+# paragraph into a single block (so nlines may exceed the limit even though the
+# caption itself is only 1-2 lines).
+_LOOSE_MAX_LINES = 4    # captions are compact; body paragraphs are longer
+_LOOSE_MAX_CHARS = 500  # captions are short; body paragraphs are much longer
+
+# Regex that identifies the start of a body-text sentence within a merged block.
+# Used to trim the caption bbox when a caption and body text share one block.
+_BODY_SENTENCE_RE = re.compile(
+    r"^(?:[A-Z]{2,}[\.!?]|[A-Z][a-z]{2,}\s+\w+\s+\w)",  # "ACT. We..." or "Notably, we..."
+)
+
+
+def _caption_bbox_from_block(block, match_line_idx):
+    """Compute a tight caption bbox, stopping before any body-text lines.
+
+    When a PDF renderer merges a caption with the following body paragraph,
+    block["bbox"] covers too much.  This function unions the bboxes of only
+    the caption lines (starting at match_line_idx), stopping at the first line
+    that looks like the start of a new body-text sentence.
+    """
+    lines = block["lines"]
+    spans = list(lines[match_line_idx]["spans"])
+
+    for j in range(match_line_idx + 1, len(lines)):
+        lt = "".join(s["text"] for s in lines[j]["spans"]).strip()
+        # Stop if this line looks like the start of a body-text paragraph:
+        # either it's long and starts with an uppercase word, or it matches
+        # the body-sentence pattern.
+        if len(lt) > 40 and lt[0].isupper() and not re.match(
+            r"^(?:Fig\.?|Figure)\s+\d+", lt, re.IGNORECASE
+        ):
+            if _BODY_SENTENCE_RE.match(lt) or len(lt) > 60:
+                break
+        spans.extend(lines[j]["spans"])
+
+    x0 = min(s["bbox"][0] for s in spans)
+    y0 = min(s["bbox"][1] for s in spans)
+    x1 = max(s["bbox"][2] for s in spans)
+    y1 = max(s["bbox"][3] for s in spans)
+    return (x0, y0, x1, y1)
 
 
 def _detect_body_font_size(doc):
@@ -189,8 +244,14 @@ def find_figure_captions(page, page_num):
     """Find figure caption blocks on a page.
 
     Returns list of dicts with fig_num, bbox, text, page.
-    Distinguishes real captions from in-text references by requiring
-    a recognized delimiter after the figure number (colon, period, or pipe).
+    Supports two caption styles:
+      - Strict (delimiter required): "Figure N:" / "Figure N." / "Figure N |"
+      - Loose (space-only): "Figure N Text..." — used when no delimiter follows
+        the figure number; requires the block to be compact (≤ 4 lines, ≤ 500
+        chars) to avoid misfiring on body text.
+    In both cases, accepts captions whose "Figure N" line is not the first line
+    in the block when all preceding lines are short subfigure labels (≤ 30 chars),
+    which handles PDFs that merge "(a) Label" lines into the caption block.
     """
     captions = []
     blocks = page.get_text("dict", flags=0)["blocks"]
@@ -199,33 +260,56 @@ def find_figure_captions(page, page_num):
         if block["type"] != 0:  # text blocks only
             continue
 
-        # Collect full block text to filter in-text references
-        block_text = ""
-        for bl_line in block["lines"]:
-            for span in bl_line["spans"]:
-                block_text += span["text"]
-        block_text = block_text.strip()
+        # Collect full block text for length guard (loose pattern only)
+        block_text = "".join(
+            span["text"] for bl_line in block["lines"] for span in bl_line["spans"]
+        ).strip()
 
-        # Collect all text and check each line
-        for line in block["lines"]:
+        for line_idx, line in enumerate(block["lines"]):
             line_text = "".join(span["text"] for span in line["spans"]).strip()
 
             m = CAPTION_PATTERN.match(line_text)
+            loose_match = False
+
             if not m:
-                continue
+                # Try the loose (space-only) pattern.
+                m = CAPTION_PATTERN_LOOSE.match(line_text)
+                if not m:
+                    continue
+                # Guards: reject body paragraphs that happen to start "Figure N
+                # shows...".  When the matched line is the FIRST line of the
+                # block (line_idx == 0) the guards are relaxed, because some
+                # PDFs merge the caption with the following body paragraph into
+                # a single block — the caption itself is still genuine.
+                if line_idx > 0:
+                    if (len(block["lines"]) > _LOOSE_MAX_LINES
+                            or len(block_text) > _LOOSE_MAX_CHARS):
+                        continue
+                loose_match = True
 
             fig_num = int(m.group(1) or m.group(2) or m.group(3))
 
-            # Skip in-text references: if the block text doesn't start with
-            # the caption pattern, this "Figure N." is just an inline mention
-            # that happens to begin a wrapped line within a body paragraph.
-            if not CAPTION_PATTERN.match(block_text):
+            # Reject in-text references.  A genuine caption line may not be the
+            # first in its block: some PDF renderers merge short subfigure labels
+            # (e.g. "(a) Existing", "(d)") into the same block as the caption.
+            # Accept if every preceding line in the block is a short label
+            # (≤ 30 chars).  Body paragraphs that happen to wrap a "Figure N"
+            # mention onto its own line will have a longer preceding line.
+            preceding_ok = all(
+                len("".join(s["text"] for s in prev["spans"]).strip()) <= 30
+                for prev in block["lines"][:line_idx]
+            )
+            if not preceding_ok:
                 continue
 
-            # Use the full text block bbox (caption may span multiple lines)
+            # Compute caption bbox.  Use a tight bbox that stops before any
+            # body-text lines when the PDF has merged caption + body into one
+            # block (common when the figure is at the bottom of a column).
+            bbox = _caption_bbox_from_block(block, line_idx)
+
             captions.append({
                 "fig_num": fig_num,
-                "bbox": block["bbox"],  # (x0, y0, x1, y1)
+                "bbox": bbox,
                 "text": line_text[:120],
                 "page": page_num,
             })

@@ -1975,15 +1975,19 @@ for _lid, _name in LANG_MAP.items():
         REVERSE_LANG_MAP[_name] = _lid
 REVERSE_LANG_MAP.update({"py": 49, "js": 31, "ts": 61, "sh": 7, "shell": 7, "yml": 66})
 
+# Color marker content: allow nested single-level {…} so LaTeX macros like
+# \boldsymbol{w} or \text{model} inside a {red:…} don't prematurely close the match.
+_COLOR_CONTENT = r"(?:[^{}]|\{[^{}]*\})+"
+
 # Inline formatting patterns (ordered by priority)
 _INLINE_PATTERNS = [
     ("code", re.compile(r"`([^`]+)`")),
-    ("red", re.compile(r"\{red:(.+?)\}")),
-    ("green", re.compile(r"\{green:(.+?)\}")),
-    ("yellow", re.compile(r"\{yellow:(.+?)\}")),
-    ("orange", re.compile(r"\{orange:(.+?)\}")),
-    ("blue", re.compile(r"\{blue:(.+?)\}")),
-    ("purple", re.compile(r"\{purple:(.+?)\}")),
+    ("red", re.compile(r"\{red:(" + _COLOR_CONTENT + r")\}")),
+    ("green", re.compile(r"\{green:(" + _COLOR_CONTENT + r")\}")),
+    ("yellow", re.compile(r"\{yellow:(" + _COLOR_CONTENT + r")\}")),
+    ("orange", re.compile(r"\{orange:(" + _COLOR_CONTENT + r")\}")),
+    ("blue", re.compile(r"\{blue:(" + _COLOR_CONTENT + r")\}")),
+    ("purple", re.compile(r"\{purple:(" + _COLOR_CONTENT + r")\}")),
     ("equation", re.compile(r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)")),
     ("link", re.compile(r"\[([^\]]+)\]\(([^)]+)\)")),
     ("bold", re.compile(r"\*\*(.+?)\*\*")),
@@ -2582,6 +2586,8 @@ def write_blocks_to_doc(
     deferred_table_widths: list[tuple[str, int]] = []  # (block_id, num_cols)
     deferred_heading_bg: list[tuple[str, str]] = []  # (block_id, bg_color_str)
 
+    failed_images: list[tuple[str, dict]] = []  # (block_id, info)
+
     while queue:
         next_queue: list[tuple[list[dict], str]] = []
 
@@ -2641,6 +2647,7 @@ def write_blocks_to_doc(
                         except Exception as e:
                             result.images_failed += 1
                             log.warning("  Image upload failed for block %s: %s", new_blk["block_id"], e)
+                            failed_images.append((new_blk["block_id"], info))
 
                 batch_bg = bg_color_map[batch_start : batch_start + 10]
                 for j, new_blk in enumerate(created):
@@ -2667,6 +2674,28 @@ def write_blocks_to_doc(
                 time.sleep(0.3)
 
         queue = next_queue
+
+    # Retry failed image uploads with exponential backoff
+    _MAX_IMAGE_RETRIES = 3
+    for attempt in range(1, _MAX_IMAGE_RETRIES + 1):
+        if not failed_images:
+            break
+        delay = 2 ** attempt  # 2s, 4s, 8s
+        log.info("Retrying %d failed image(s) (attempt %d/%d, delay %ds)…",
+                 len(failed_images), attempt, _MAX_IMAGE_RETRIES, delay)
+        time.sleep(delay)
+        still_failed = []
+        for bid, info in failed_images:
+            try:
+                upload_image_to_block(user_token, doc_id, bid,
+                                      info["data"], width=info["width"], height=info["height"])
+                result.images_failed -= 1
+                result.images_uploaded += 1
+                log.info("  Image retry OK for block %s", bid)
+            except Exception as e:
+                log.warning("  Image retry failed for block %s: %s", bid, e)
+                still_failed.append((bid, info))
+        failed_images = still_failed
 
     # Patch heading background colors (create API rejects bg; PATCH with string enum works)
     for bid, bg_str in deferred_heading_bg:
@@ -2779,9 +2808,14 @@ def cmd_write(args: argparse.Namespace) -> None:
     parent_node = get_wiki_node(user_token, parent_node_token)
     space_id = parent_node["space_id"]
 
-    md_text = sys.stdin.read()
+    input_file = getattr(args, "input_file", None)
+    if input_file:
+        with open(input_file, "r", encoding="utf-8") as fh:
+            md_text = fh.read()
+    else:
+        md_text = sys.stdin.read()
     if not md_text.strip():
-        print("Error: no markdown content on stdin", file=sys.stderr)
+        print("Error: no markdown content (stdin was empty or file was empty)", file=sys.stderr)
         raise SystemExit(1)
 
     # Determine title
@@ -2981,6 +3015,8 @@ def main() -> None:
                          help="Directory to resolve relative image paths from (for ![alt](path) in markdown)")
     p_write.add_argument("--verify", action="store_true",
                          help="Read back the created page and verify block count after writing")
+    p_write.add_argument("--input-file", "-f",
+                         help="Read markdown from FILE instead of stdin")
     p_write.set_defaults(func=cmd_write)
 
     # copy
