@@ -90,18 +90,29 @@ The script outputs clean markdown to stdout (logs go to stderr). Display the con
 Create a new Feishu wiki page from markdown content.
 
 1. Prepare the markdown content from the conversation or a file.
-2. Write the page using a heredoc:
+2. Write the optimized content to a temp file, then upload:
    ```bash
-   python <skill-directory>/scripts/feishu_tool.py write PARENT_URL --title "Page Title" <<'MARKDOWN'
+   # Step 1: Write content to a temp file
+   UPLOAD_TMP=$(mktemp /tmp/feishu_upload_XXXXXX.md)
+   cat > "$UPLOAD_TMP" << 'FEISHU_CONTENT_END'
    ## Section 1
 
    Content here...
-   MARKDOWN
+   FEISHU_CONTENT_END
+
+   # Step 2: Upload from file
+   python <skill-directory>/scripts/feishu_tool.py write PARENT_URL \
+     --title "Page Title" \
+     --input-file "$UPLOAD_TMP"
+
+   # Step 3: Clean up
+   rm -f "$UPLOAD_TMP"
    ```
 3. The script prints the new page URL to stdout. **Share this URL** with the user.
 
 ### Options
 - `--heading-color` — Auto-color heading backgrounds by relative depth: outermost → **red/pink**, then orange, yellow, green, blue, purple. Explicit `{bg=N}` on a heading always wins.
+- `--input-file FILE` / `-f FILE` — Read markdown from `FILE` instead of stdin. Preferred over heredoc for large documents (avoids shell escaping issues).
 
 ### Inline formatting
 | Syntax | Result |
@@ -123,7 +134,8 @@ Create a new Feishu wiki page from markdown content.
 ### Notes
 - New page is created as a child (sub-node) of the parent.
 - If `--title` is omitted, title is extracted from the first H1.
-- The `MARKDOWN` delimiter must be quoted (`'MARKDOWN'`) to prevent variable expansion.
+- Always use `<< 'FEISHU_CONTENT_END'` (quoted delimiter) to prevent variable expansion in the temp file write step.
+- The `--input-file` approach avoids heredoc shell escaping issues (e.g. `{red:...}` markers containing `{...}` in LaTeX).
 - Supported: headings, paragraphs, bold, italic, code, strikethrough, links, bullet/ordered lists, code blocks, blockquotes, dividers, **tables** (`| col | col |` pipe format), callout blocks, quote containers (`|>` prefix), LaTeX equations, **images**.
 - **Images**: Use `![alt](path)` in markdown. Pass `--image-dir DIR` to resolve relative image paths. Images are uploaded after block creation. If `--image-dir` is omitted, image lines are treated as text.
 
@@ -304,17 +316,29 @@ Determine the image directory:
 Write the optimized content as a new sub-page under `PARENT_URL`:
 
 ```bash
-python <skill-directory>/scripts/feishu_tool.py write PARENT_URL --heading-color --image-dir "IMAGE_DIR" --title "TITLE" <<'FEISHU_EOF'
+# Step 1: Write optimized content to a temp file
+UPLOAD_TMP=$(mktemp /tmp/feishu_upload_XXXXXX.md)
+cat > "$UPLOAD_TMP" << 'FEISHU_CONTENT_END'
 [full optimized markdown content here — NO H1 line]
-FEISHU_EOF
+FEISHU_CONTENT_END
+
+# Step 2: Upload from file (auto-retries failed image uploads)
+python <skill-directory>/scripts/feishu_tool.py write PARENT_URL \
+  --heading-color \
+  --image-dir "IMAGE_DIR" \
+  --title "TITLE" \
+  --input-file "$UPLOAD_TMP"
+
+# Step 3: Clean up temp file
+rm -f "$UPLOAD_TMP"
 ```
 
 **Important notes:**
 - Always include `--heading-color` to auto-color headings by depth
 - Include `--image-dir` pointing to the markdown file's parent directory when images are present
-- **Do NOT include the `# Title` H1 line in the heredoc body.** The title is set via `--title`. If H1 is in the body, heading depths shift by 1 and all headings get the wrong color.
-- Use `<<'FEISHU_EOF'` (quoted delimiter) to prevent variable expansion
-- If the content contains the literal string `FEISHU_EOF` on its own line, use a different delimiter (e.g., `<<'MD_UPLOAD_END'`)
+- **Do NOT include the `# Title` H1 line in the content body.** The title is set via `--title`. If H1 is in the body, heading depths shift by 1 and all headings get the wrong color.
+- Use `<< 'FEISHU_CONTENT_END'` (quoted delimiter) to prevent variable expansion
+- The `--input-file` approach avoids shell escaping issues and enables image upload auto-retry
 
 The script prints the URL of the newly created page. **Share this URL with the user.**
 
@@ -526,17 +550,27 @@ Determine an appropriate title. Use the source document's original title, option
 Write the optimized content as a new sub-page under the reference document:
 
 ```bash
-python <skill-directory>/scripts/feishu_tool.py write DEST_URL --heading-color --title "TITLE" <<'MARKDOWN'
+# Step 1: Write optimized content to a temp file
+UPLOAD_TMP=$(mktemp /tmp/feishu_upload_XXXXXX.md)
+cat > "$UPLOAD_TMP" << 'FEISHU_CONTENT_END'
 [full optimized markdown content here — NO H1 line]
-MARKDOWN
+FEISHU_CONTENT_END
+
+# Step 2: Upload from file (auto-retries failed image uploads)
+python <skill-directory>/scripts/feishu_tool.py write DEST_URL \
+  --heading-color \
+  --title "TITLE" \
+  --input-file "$UPLOAD_TMP"
+
+# Step 3: Clean up temp file
+rm -f "$UPLOAD_TMP"
 ```
 
 **Important notes for writing:**
 - Always include `--heading-color` to auto-color headings by depth (required for visual formatting)
-- **Do NOT include a `# Title` H1 line in the heredoc body.** The page title is set via `--title`. If H1 is in the body, it shifts heading depth by 1 and all headings get the wrong color (orange instead of red for top-level `##` sections).
-- Use a heredoc (`<<'MARKDOWN'`) to avoid shell escaping issues
-- The `MARKDOWN` delimiter must be quoted (`'MARKDOWN'` not `MARKDOWN`) to prevent variable expansion
-- If the content contains the string `MARKDOWN` on its own line, use a different delimiter (e.g., `<<'FEISHU_EOF'`)
+- **Do NOT include a `# Title` H1 line in the content body.** The page title is set via `--title`. If H1 is in the body, it shifts heading depth by 1 and all headings get the wrong color (orange instead of red for top-level `##` sections).
+- Use `<< 'FEISHU_CONTENT_END'` (quoted delimiter) to prevent variable expansion
+- The `--input-file` approach avoids shell escaping issues and enables image upload auto-retry
 
 The script prints the URL of the newly created page. **Share this URL with the user.**
 
