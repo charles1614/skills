@@ -6,6 +6,7 @@ Only requires: requests, python-dotenv, and a .env file with credentials.
 
 Usage:
     python feishu_tool.py read   URL [--no-title]
+    python feishu_tool.py diff   LEFT_URL RIGHT_URL [--no-title] [--context N] [--normalize]
     python feishu_tool.py write  PARENT_URL [--title TITLE]
     python feishu_tool.py copy   SOURCE_URL TARGET_URL [-r] [-n] [--fix-refs] [--title T]
     python feishu_tool.py sync   SOURCE_URL TARGET_URL [-n] [--no-fix-refs] [--title T]
@@ -18,6 +19,7 @@ from __future__ import annotations
 import argparse
 import copy as _copy
 import concurrent.futures
+import difflib
 import hashlib
 import io
 import json
@@ -61,6 +63,13 @@ class WriteResult:
     cleanup_deleted: int = 0
 
 
+@dataclass
+class MarkdownNormalizationReport:
+    metadata_blocks_removed: int = 0
+    table_separator_rows_normalized: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 BASE_URL = "https://open.feishu.cn"
@@ -73,9 +82,16 @@ _LOG_DIR = os.path.join(Path.home(), "log", "feishu_tools", "sync_logs")
 
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
-_TIMEOUT = 30
-_MAX_RETRIES = 5
+_TIMEOUT = 60
+_MAX_RETRIES = 8
 _RATE_LIMIT_CODES = {99991400, 99991429}
+_WRITE_RETRIES = 6
+_WRITE_BATCH_SIZE = 5
+_WRITE_BATCH_DELAY = 1.0
+_WRITE_QUEUE_DELAY = 0.5
+_WRITE_PATCH_DELAY = 0.5
+_CREATE_CHILDREN_TIMEOUT = 90
+_FINALIZE_RETRIES = 6
 
 
 def api_request(method: str, url: str, **kwargs) -> requests.Response:
@@ -83,31 +99,148 @@ def api_request(method: str, url: str, **kwargs) -> requests.Response:
     backoff = 1
     for attempt in range(_MAX_RETRIES):
         try:
+            files = kwargs.get("files")
+            if isinstance(files, dict):
+                for value in files.values():
+                    if isinstance(value, tuple) and len(value) >= 2:
+                        stream = value[1]
+                        if hasattr(stream, "seek"):
+                            stream.seek(0)
             resp = requests.request(method, url, **kwargs)
         except (requests.ConnectionError, requests.Timeout) as exc:
             if attempt < _MAX_RETRIES - 1:
                 log.warning("Request failed (%s), retrying in %ds …", exc, backoff)
                 time.sleep(backoff)
-                backoff = min(backoff * 2, 30)
+                backoff = min(backoff * 2, 60)
                 continue
             raise
         if resp.status_code == 429:
             retry_after = int(resp.headers.get("Retry-After", backoff))
             log.warning("Rate limited (HTTP 429), retrying in %ds …", retry_after)
             time.sleep(retry_after)
-            backoff = min(backoff * 2, 30)
+            backoff = min(backoff * 2, 60)
             continue
         try:
             data = resp.json()
             if data.get("code") in _RATE_LIMIT_CODES:
                 log.warning("Rate limited (code=%d), retrying in %ds …", data["code"], backoff)
                 time.sleep(backoff)
-                backoff = min(backoff * 2, 30)
+                backoff = min(backoff * 2, 60)
                 continue
         except ValueError:
             pass
         return resp
     return resp
+
+
+def _is_retryable_write_error(exc: Exception) -> bool:
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        return True
+    msg = str(exc).lower()
+    return any(token in msg for token in (
+        "timed out",
+        "timeout",
+        "connection aborted",
+        "connection reset",
+        "temporarily unavailable",
+        "rate limited",
+        "429",
+        "max retries exceeded",
+    ))
+
+
+_RAW_METADATA_LINE_RE = re.compile(
+    r"^\s*\*\*(作者|机构|发表|发表/预印|分析日期)\*\*:\s*.*$"
+)
+_TABLE_METADATA_LABEL_RE = re.compile(
+    r"\|\s*\*\*(作者|机构|发表|发表/预印|分析日期)\*\*\s*\|"
+)
+_UNICODE_DASH_CELL_RE = re.compile(r"[—–]+")
+
+
+def _normalize_table_separator_row(line: str) -> str:
+    stripped = line.strip()
+    if not stripped.startswith("|"):
+        return line
+    cells = [c.strip() for c in stripped.strip("|").split("|")]
+    if not cells:
+        return line
+    if not all(c and _UNICODE_DASH_CELL_RE.fullmatch(c) for c in cells):
+        return line
+    return "|" + "|".join("-" * max(3, len(c)) for c in cells) + "|"
+
+
+def _remove_duplicate_loose_metadata_block(md_text: str, report: MarkdownNormalizationReport) -> str:
+    lines = md_text.splitlines()
+    has_metadata_table = any(_TABLE_METADATA_LABEL_RE.search(ln) for ln in lines)
+    if not has_metadata_table:
+        return md_text
+
+    # Remove a loose metadata paragraph block near the top if a structured metadata
+    # table already exists later. This prevents duplicated author/venue display.
+    start = None
+    end = None
+    for i, line in enumerate(lines[:80]):
+        if _RAW_METADATA_LINE_RE.match(line):
+            start = i
+            j = i
+            while j < len(lines):
+                cur = lines[j]
+                if _RAW_METADATA_LINE_RE.match(cur) or not cur.strip():
+                    j += 1
+                    continue
+                break
+            end = j
+            break
+
+    if start is not None and end is not None:
+        lines = lines[:start] + lines[end:]
+        report.metadata_blocks_removed += 1
+        # Collapse leading extra blank lines after removal.
+        while len(lines) >= 2 and not lines[0].strip() and not lines[1].strip():
+            lines.pop(0)
+    return "\n".join(lines) + ("\n" if md_text.endswith("\n") else "")
+
+
+def _normalize_markdown_tables(md_text: str, report: MarkdownNormalizationReport) -> str:
+    lines = md_text.splitlines()
+    out: list[str] = []
+    for line in lines:
+        norm = _normalize_table_separator_row(line)
+        if norm != line:
+            report.table_separator_rows_normalized += 1
+        out.append(norm)
+    return "\n".join(out) + ("\n" if md_text.endswith("\n") else "")
+
+
+def _lint_markdown_for_feishu(md_text: str, report: MarkdownNormalizationReport) -> None:
+    red_count = md_text.count("{red:") + md_text.count("{red:**")
+    green_count = md_text.count("{green:") + md_text.count("{green:**")
+    if green_count and red_count > green_count * 6:
+        report.warnings.append(
+            f"red/green balance is skewed ({red_count} red vs {green_count} green)"
+        )
+    if "{yellow:" not in md_text and ("限制" in md_text or "局限" in md_text or "caveat" in md_text.lower()):
+        report.warnings.append("document discusses limitations/tradeoffs but has no yellow highlights")
+
+    formula_in_quoted_context = re.search(
+        r"(?m)^(?:>\s.*(?:\$\$|\$[^$\n]+\$).*|\|>\s.*(?:\$\$|\$[^$\n]+\$).*)$",
+        md_text,
+    )
+    if formula_in_quoted_context:
+        report.warnings.append(
+            "inline/display LaTeX inside blockquote/callout/quote container may render poorly in Feishu; "
+            "move formula-bearing summaries or insights to a normal numbered subsection or plain paragraph"
+        )
+
+
+def normalize_markdown_for_feishu(md_text: str) -> tuple[str, MarkdownNormalizationReport]:
+    report = MarkdownNormalizationReport()
+    normalized = md_text
+    normalized = _remove_duplicate_loose_metadata_block(normalized, report)
+    normalized = _normalize_markdown_tables(normalized, report)
+    _lint_markdown_for_feishu(normalized, report)
+    return normalized, report
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -122,7 +255,8 @@ def _load_token_cache() -> dict:
 
 def _save_token_cache(data: dict) -> None:
     os.makedirs(os.path.dirname(TOKEN_CACHE), exist_ok=True)
-    with open(TOKEN_CACHE, "w") as f:
+    fd = os.open(TOKEN_CACHE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         json.dump(data, f, indent=2)
 
 
@@ -393,7 +527,6 @@ def patch_block(user_token: str, doc_id: str, block_id: str, body: dict) -> None
 
 
 def upload_media(user_token: str, data_bytes: bytes, parent_node: str = "", filename: str = "image.png") -> str:
-    import io
     resp = api_request(
         "POST", f"{BASE_URL}/open-apis/drive/v1/medias/upload_all",
         headers={"Authorization": f"Bearer {user_token}"},
@@ -1835,10 +1968,9 @@ def _render_elements(elements: list[dict], raw: bool = False) -> str:
                 elif tc and tc not in (0, 5):
                     text = f"{{color={tc}:{text}}}"
                 else:
-                    _BG_REV = {v: k for k, v in _BG_COLOR_MAP.items()}
                     bc = style.get("background_color")
-                    if bc and bc in _BG_REV:
-                        text = f"{{{_BG_REV[bc]}:{text}}}"
+                    if bc and bc in _BG_COLOR_REV:
+                        text = f"{{{_BG_COLOR_REV[bc]}:{text}}}"
             parts.append(text)
         elif "mention_doc" in elem:
             doc = elem["mention_doc"]
@@ -1955,6 +2087,46 @@ def blocks_to_markdown(blocks: list[dict], title: str = "") -> str:
                 for line in render(cid, prefix=""):
                     lines.append("|> " + line if line.strip() else "|>")
             lines.append("")
+        elif bt in (18, 31):
+            # Table: render as markdown pipe table
+            tbl = b.get("table", b.get("text", {}))
+            prop = tbl.get("property", {})
+            num_cols = prop.get("column_size", 0)
+            num_rows = prop.get("row_size", 0)
+            cell_ids = tbl.get("cells", [])
+            if bt == 18 and cell_ids and isinstance(cell_ids[0], list):
+                flat_cells = [c for row in cell_ids for c in row]
+            else:
+                flat_cells = cell_ids
+            rows: list[list[str]] = []
+            for ri in range(num_rows):
+                row: list[str] = []
+                for ci in range(num_cols):
+                    idx = ri * num_cols + ci
+                    if idx < len(flat_cells):
+                        cell_id = flat_cells[idx]
+                        cell_blk = block_map.get(cell_id)
+                        if cell_blk:
+                            cell_parts: list[str] = []
+                            for ccid in cell_blk.get("children", []):
+                                cb = block_map.get(ccid)
+                                if cb and cb["block_type"] == 2:
+                                    cell_parts.append(
+                                        _render_elements(cb.get("text", {}).get("elements", []))
+                                    )
+                            row.append(" ".join(cell_parts))
+                        else:
+                            row.append("")
+                    else:
+                        row.append("")
+                rows.append(row)
+            if rows:
+                lines.append("")
+                for ri, row in enumerate(rows):
+                    lines.append("| " + " | ".join(row) + " |")
+                    if ri == 0:
+                        lines.append("|" + "|".join("---" for _ in row) + "|")
+                lines.append("")
         elif bt in (24, 25):
             for cid in b.get("children", []):
                 lines += render(cid, prefix=prefix)
@@ -1998,6 +2170,7 @@ _INLINE_PATTERNS = [
 # {red:...} → text_color=1 (red font color); use liberally for key points throughout a document.
 # Other colors → background_color (text highlight/background, like a highlighter pen).
 _BG_COLOR_MAP = {"green": 4, "yellow": 3, "orange": 2, "blue": 5, "purple": 6}
+_BG_COLOR_REV = {v: k for k, v in _BG_COLOR_MAP.items()}
 
 
 def _emit(text: str, style: dict, elements: list[dict]) -> None:
@@ -2578,7 +2751,6 @@ PAGE_TABLE_WIDTH = 820  # Total table width in px to fill page margin
 
 def write_blocks_to_doc(
     user_token: str, doc_id: str, blocks: list[dict],
-    app_id: str = "", app_secret: str = "",
 ) -> WriteResult:
     """Write nested block dicts into a Feishu document. Returns a WriteResult with counters."""
     result = WriteResult()
@@ -2776,13 +2948,131 @@ def cleanup_write_empty_tails(user_token: str, doc_id: str) -> int:
     return deleted
 
 
+def retry_finalizer(label: str, fn, retries: int = _FINALIZE_RETRIES) -> None:
+    last_exc: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            fn()
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= retries:
+                break
+            delay = min(2 ** attempt, 60)
+            log.warning(
+                "%s failed on attempt %d/%d: %s. Retrying in %ds …",
+                label, attempt, retries, exc, delay,
+            )
+            time.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
+
+
+def _get_doc_nonroot_block_count(user_token: str, doc_id: str) -> int:
+    blocks = get_all_blocks(user_token, doc_id)
+    return len([b for b in blocks if b["block_id"] != doc_id])
+
+
+def assert_doc_production_ready(
+    user_token: str, doc_id: str, result: WriteResult, expected_min_blocks: int,
+) -> int:
+    actual_count = _get_doc_nonroot_block_count(user_token, doc_id)
+    min_expected = max(1, expected_min_blocks // 2)
+    problems: list[str] = []
+    if actual_count < min_expected:
+        problems.append(
+            f"block count too low ({actual_count}, expected at least {min_expected})"
+        )
+    if result.blocks_failed:
+        problems.append(f"{result.blocks_failed} block batch item(s) failed")
+    if result.images_failed:
+        problems.append(f"{result.images_failed} image upload(s) failed")
+    if result.bg_patches_failed:
+        problems.append(f"{result.bg_patches_failed} heading background patch(es) failed")
+    if result.table_patches_failed:
+        problems.append(f"{result.table_patches_failed} table width patch(es) failed")
+    if problems:
+        raise RuntimeError("document not production-ready: " + "; ".join(problems))
+    return actual_count
+
+
+def _reset_doc_root(user_token: str, doc_id: str) -> int:
+    root = get_block(user_token, doc_id, doc_id)
+    kids = root.get("children", [])
+    if not kids:
+        return 0
+    delete_children_tail(user_token, doc_id, doc_id, 0, len(kids))
+    return len(kids)
+
+
+def write_doc_with_retries(
+    user_token: str, doc_id: str, blocks: list[dict], verify: bool = False,
+) -> WriteResult:
+    last_exc: Exception | None = None
+    for attempt in range(1, _WRITE_RETRIES + 1):
+        try:
+            if attempt > 1:
+                deleted = _reset_doc_root(user_token, doc_id)
+                if deleted:
+                    log.warning(
+                        "Cleared %d existing root block(s) before write retry %d/%d",
+                        deleted, attempt, _WRITE_RETRIES,
+                    )
+            result = write_blocks_to_doc(user_token, doc_id, blocks)
+            result.cleanup_deleted = cleanup_write_empty_tails(user_token, doc_id)
+            if verify:
+                actual_count = _get_doc_nonroot_block_count(user_token, doc_id)
+                if actual_count == 0:
+                    raise RuntimeError("write verification found zero non-root blocks")
+            return result
+        except Exception as exc:
+            last_exc = exc
+            actual_count = -1
+            try:
+                actual_count = _get_doc_nonroot_block_count(user_token, doc_id)
+            except Exception as verify_exc:
+                log.warning("Write verification after failure also failed: %s", verify_exc)
+
+            if not _is_retryable_write_error(exc) or attempt >= _WRITE_RETRIES:
+                if actual_count > 0:
+                    log.warning(
+                        "Write hit an error after page content was created (%d non-root blocks): %s",
+                        actual_count, exc,
+                    )
+                raise
+
+            delay = min(2 ** attempt, 60)
+            if actual_count > 0:
+                log.warning(
+                    "Write attempt %d/%d failed after partial content was created (%d non-root blocks): %s. "
+                    "Will clear and retry in %ds …",
+                    attempt, _WRITE_RETRIES, actual_count, exc, delay,
+                )
+            else:
+                log.warning(
+                    "Write attempt %d/%d failed before verification succeeded: %s. Retrying in %ds …",
+                    attempt, _WRITE_RETRIES, exc, delay,
+                )
+            time.sleep(delay)
+
+    assert last_exc is not None
+    raise last_exc
+
+
 # ── Commands ──────────────────────────────────────────────────────────────────
 
 
 def cmd_read(args: argparse.Namespace) -> None:
+    md = _fetch_page_markdown(args.url, include_title=not args.no_title)
+    sys.stdout.write(md)
+    if not md.endswith("\n"):
+        sys.stdout.write("\n")
+
+
+def _fetch_page_markdown(url_or_token: str, include_title: bool = True) -> str:
     app_id, app_secret = _get_credentials()
     user_token = get_valid_user_token(app_id, app_secret)
-    node_token = parse_node_token(args.url)
+    node_token = parse_node_token(url_or_token)
 
     node = get_wiki_node(user_token, node_token)
     obj_token = node["obj_token"]
@@ -2794,10 +3084,34 @@ def cmd_read(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
     blocks = get_all_blocks(user_token, obj_token)
-    md = blocks_to_markdown(blocks, title="" if args.no_title else title)
-    sys.stdout.write(md)
-    if not md.endswith("\n"):
-        sys.stdout.write("\n")
+    return blocks_to_markdown(blocks, title="" if not include_title else title)
+
+
+def cmd_diff(args: argparse.Namespace) -> None:
+    left_md = _fetch_page_markdown(args.left, include_title=not args.no_title)
+    right_md = _fetch_page_markdown(args.right, include_title=not args.no_title)
+
+    if args.normalize:
+        left_md, _ = normalize_markdown_for_feishu(left_md)
+        right_md, _ = normalize_markdown_for_feishu(right_md)
+
+    left_lines = left_md.splitlines()
+    right_lines = right_md.splitlines()
+    diff = difflib.unified_diff(
+        left_lines,
+        right_lines,
+        fromfile=args.left,
+        tofile=args.right,
+        lineterm="",
+        n=args.context,
+    )
+    out = "\n".join(diff)
+    if out:
+        sys.stdout.write(out)
+        if not out.endswith("\n"):
+            sys.stdout.write("\n")
+    else:
+        print("No differences found.")
 
 
 def cmd_write(args: argparse.Namespace) -> None:
@@ -2817,6 +3131,14 @@ def cmd_write(args: argparse.Namespace) -> None:
     if not md_text.strip():
         print("Error: no markdown content (stdin was empty or file was empty)", file=sys.stderr)
         raise SystemExit(1)
+
+    md_text, norm_report = normalize_markdown_for_feishu(md_text)
+    if norm_report.metadata_blocks_removed:
+        print(f"  Normalized     : removed {norm_report.metadata_blocks_removed} duplicate metadata block(s)", file=sys.stderr)
+    if norm_report.table_separator_rows_normalized:
+        print(f"  Normalized     : rewrote {norm_report.table_separator_rows_normalized} table separator row(s)", file=sys.stderr)
+    for warning in norm_report.warnings:
+        print(f"  Warning        : {warning}", file=sys.stderr)
 
     # Determine title
     title = args.title
@@ -2842,15 +3164,16 @@ def cmd_write(args: argparse.Namespace) -> None:
     node_token, doc_id = create_wiki_node(user_token, space_id, parent_node_token, title)
     log.info("Created node: https://my.feishu.cn/wiki/%s", node_token)
 
-    result = write_blocks_to_doc(user_token, doc_id, blocks)
+    result = write_doc_with_retries(
+        user_token, doc_id, blocks, verify=getattr(args, "verify", False),
+    )
     log.info("Wrote %d blocks", result.blocks_created)
-
-    # Clean up auto-created trailing empty paragraphs in callouts/quote_containers
-    result.cleanup_deleted = cleanup_write_empty_tails(user_token, doc_id)
+    actual_count = assert_doc_production_ready(user_token, doc_id, result, blocks_parsed)
 
     # ── Write summary ──────────────────────────────────────────────────────────
     print("Write summary:", file=sys.stderr)
     print(f"  Blocks created : {result.blocks_created}", file=sys.stderr)
+    print(f"  Blocks present : {actual_count}", file=sys.stderr)
     print(f"  Blocks failed  : {result.blocks_failed}", file=sys.stderr)
     if deferred_bg := result.bg_patches_ok + result.bg_patches_failed:
         print(f"  Heading BG     : {result.bg_patches_ok} ok, {result.bg_patches_failed} failed", file=sys.stderr)
@@ -2865,9 +3188,6 @@ def cmd_write(args: argparse.Namespace) -> None:
 
     # ── Optional post-write verification ──────────────────────────────────────
     if getattr(args, "verify", False):
-        actual_blocks = get_all_blocks(user_token, doc_id)
-        # Exclude the root page block itself
-        actual_count = len([b for b in actual_blocks if b["block_id"] != doc_id])
         expected = result.blocks_created
         print(f"Verification: found {actual_count} blocks in created page (expected ~{expected})", file=sys.stderr)
         if actual_count == 0 or actual_count < expected // 2:
@@ -2994,7 +3314,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         prog="feishu_tool",
-        description="Standalone Feishu wiki tool: read, write, copy, sync, export",
+        description="Standalone Feishu wiki tool: read, diff, write, copy, sync, export",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     subparsers = parser.add_subparsers(dest="command")
@@ -3004,6 +3324,16 @@ def main() -> None:
     p_read.add_argument("url", help="Wiki URL or node token")
     p_read.add_argument("--no-title", action="store_true", help="Omit H1 title")
     p_read.set_defaults(func=cmd_read)
+
+    # diff
+    p_diff = subparsers.add_parser("diff", help="Diff two wiki pages as markdown")
+    p_diff.add_argument("left", help="Left wiki URL or node token")
+    p_diff.add_argument("right", help="Right wiki URL or node token")
+    p_diff.add_argument("--no-title", action="store_true", help="Omit H1 title before diffing")
+    p_diff.add_argument("--context", type=int, default=3, help="Unified diff context lines")
+    p_diff.add_argument("--normalize", action="store_true",
+                        help="Normalize markdown before diffing to reduce noisy formatting diffs")
+    p_diff.set_defaults(func=cmd_diff)
 
     # write
     p_write = subparsers.add_parser("write", help="Create wiki page from stdin markdown")
