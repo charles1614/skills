@@ -53,6 +53,8 @@ Determine the action from the user's intent:
 |-------------|--------|
 | Read/view/fetch a page | `read SOURCE_URL` |
 | Write/create/publish a page | `write PARENT_URL` |
+| Compare two pages | `diff LEFT_URL RIGHT_URL` |
+| Show page metadata | `info SOURCE_URL` |
 | Optimize/polish a page | `optimize SOURCE_URL DEST_URL` |
 | Upload a local markdown file | `upload MD_PATH PARENT_URL` |
 | Copy a page | `copy SOURCE_URL TARGET_URL` |
@@ -80,8 +82,39 @@ The script outputs clean markdown to stdout (logs go to stderr). Display the con
 
 ### Notes
 - On first run, it may prompt for OAuth authorization — follow the printed URL
-- Token is cached in `.feishu_token_cache.json` for subsequent runs
+- Token is cached in `~/.config/feishu_tools/token_cache.json` for subsequent runs
 - Supports docx-type wiki pages only
+
+---
+
+## Action: diff
+
+Read two Feishu wiki pages as markdown and print a unified diff.
+
+```bash
+python <skill-directory>/scripts/feishu_tool.py diff LEFT_URL RIGHT_URL
+```
+
+Options:
+- `--no-title` — omit the H1 title before diffing
+- `--context N` — control unified diff context size (default: 3)
+- `--normalize` — normalize markdown before diffing to reduce noisy differences
+
+Recommended use:
+- Compare a newly created page against a reference page before modifying the tool or skill
+- Use `--normalize` when you want to focus on substantive markdown structure differences rather than trivial separator normalization (e.g. Unicode dashes in table separator rows)
+
+---
+
+## Action: info
+
+Show page metadata.
+
+```bash
+python <skill-directory>/scripts/feishu_tool.py info SOURCE_URL
+```
+
+Prints: title, node token, obj token, obj type, space ID, has_child.
 
 ---
 
@@ -176,12 +209,21 @@ Read the file content. This is the document to upload.
 - Existing heading structure and hierarchy
 - Content organization and flow
 - Use of formatting (bold, lists, code blocks, tables, LaTeX, etc.)
+- Metadata blocks (author, venue, date, etc.)
+- **Technical payload that must survive**: numbers, formulas, systems, complexity, deployment facts, experiment settings, citations, caveats, mechanism details
 
 **Record your observations** — you will need them in Task 4 to preserve the original character.
 
 #### Task 2: Format Analysis
 
 Read [`references/optimization-guide.md`](<skill-directory>/references/optimization-guide.md) for the detailed comparison framework and known format conventions.
+
+**Reference Discipline:**
+- The optimization guide is a style reference, not a license to restyle the document wholesale
+- Preserve the source document's macro-structure unless there is a clear formatting defect
+- Do not renumber or deepen the heading hierarchy just to match the reference pattern if the source already has a stable hierarchy
+- If an opening block, metadata block, or summary layout already works, prefer light cleanup over redesign
+- Prefer blockquote-style callouts that round-trip correctly in exported markdown
 
 Check the document against these specific format conventions:
 
@@ -196,6 +238,13 @@ Check the document against these specific format conventions:
 | Bold key terms | First mention of important technical terms bolded | Applied? |
 | Inline emphasis | `{red:...}` / `{red:**...**}` for key points (10–20× in a long doc); `{green:...}` for first-mention key terms (5–10×) | Enough red text? |
 | LaTeX equations | `$inline$` and `$$display$$` | Correct syntax? |
+| Formula placement | Formulas in normal paragraphs, not inside blockquotes/callouts | Any `$...$` inside `>`? |
+
+**Hard Constraints:**
+- Do **not** assume numbered headings are mandatory when the source already has a coherent hierarchy
+- Do **not** force extra subsection levels simply because the reference is more granular
+- Treat opening layout, metadata layout, and top-of-document summary layout as high-risk areas where over-editing is likely to regress the page
+- Prefer blockquote-style callouts that round-trip correctly in exported markdown
 
 **Important**: Only note FORMAT differences. Do not evaluate content topics.
 
@@ -249,10 +298,21 @@ Read [`references/conservative-edits.md`](<skill-directory>/references/conservat
 
 3. **Callouts and quote containers — use freely throughout the document**
    - **TL;DR blocks** → always convert to **blue callout**: `[!callout icon=bulb bg=2 border=2]` (NOT a `|>` quote container)
-   - **"一句话总结" / "一句话定位" / "核心思想" / "关键结论"** → always convert to **green callout**: `[!callout icon=pushpin bg=3 border=3]` (NOT a `|>` quote container)
+   - **"一句话总结" / "一句话定位" / "核心思想" / "关键结论"** → normally convert to **green callout**: `[!callout icon=pushpin bg=3 border=3]` (NOT a `|>` quote container); **exception**: if they contain `$...$`, `$$...$$`, or multiple inline equations, use normal body text or a nearby summary subsection instead
    - Add `|>` quote containers for other key insights, important observations, counterintuitive findings, and critical design decisions — no upper limit
    - Add `> 📌 **标题**: ...` blockquotes for critical facts and must-not-miss design decisions
    - A well-formatted long document should have **5–15 callouts/quote containers** spread across sections
+
+   **Feishu Callout Syntax Rules:**
+   - Use `> [!callout icon=...]` form, not a bare `[!callout ...]` line
+   - Keep the callout marker and its body in the same blockquote group
+   - If unsure whether a custom callout will round-trip correctly, use a plain `> 📌 ...` blockquote instead
+
+   **Formula Safety Rules:**
+   - Do **not** keep formula-bearing summaries inside blockquotes, callouts, or quote containers
+   - If a summary sentence contains LaTeX, place it as a normal paragraph or a nearby summary subsection
+   - If a sentence mixes prose and several formulas, prefer a normal paragraph
+   - If the formula is the main payload, prefer a lead-in sentence plus a standalone display equation block
 
 4. **Code block language tags** — Add missing language tags to bare code blocks
 
@@ -280,6 +340,8 @@ Read [`references/conservative-edits.md`](<skill-directory>/references/conservat
    Rules:
    - Preserve ALL existing `{red:...}`, `{green:...}`, `**bold**`, `*italic*` exactly
    - Never mark entire paragraphs — but DO mark full key sentences/clauses that a reader must not miss
+   - Red emphasis is reserved for conclusions and consequences, not routine explanatory clauses
+   - Green emphasis is used on genuine first-mention concepts, not repeated on every prominent noun
 
 7. **Factual corrections** — Fix identified errors from Task 3
 
@@ -303,6 +365,40 @@ Read [`references/conservative-edits.md`](<skill-directory>/references/conservat
 
 Produce the **complete optimized markdown**. Do NOT output a diff — output the full document.
 
+#### Task 4.5: Content Preservation Audit
+
+Before proceeding to upload, check for:
+- Dropped bullets or list items
+- Shortened mechanism descriptions
+- Removed numbers, formulas, complexity, thresholds
+- Removed deployment/experiment/workload facts
+- Removed citations or named systems
+- Macro-structure drift: added or removed top-level sections, subsection splits, or heading renumbering not justified by a broken source
+- Opening-layout drift: title-adjacent summary, author/meta block, and first visual block still feel like the source rather than a template rewrite
+
+If any technical section is materially shorter, re-check it line by line.
+
+#### Task 4.6: Emphasis Audit
+
+Before proceeding to upload, check for:
+- At least 1 red conclusion in each major section
+- Green first-mention highlights where new concepts appear
+- Bold structural anchors
+- Yellow highlights for caveats/tradeoffs where appropriate
+- Emphasis density still matches the source tone; remove highlights if the page starts to feel over-marked or noisier than the reference
+- Red emphasis is reserved for conclusions and consequences, not routine explanatory clauses
+- Green emphasis is used on genuine first-mention concepts, not repeated on every prominent noun
+
+#### Task 4.7: Rendered-Layout Regression Check
+
+Visually inspect the final markdown and reject it if any of these regressions appear:
+- Opening callout or opening summary looks weaker than the source/reference
+- Top metadata collapses into stray lines or duplicated blocks
+- A clean source paragraph was turned into a noisier list, or a clean list into a denser paragraph
+- Headings became more numerous or deeper without a clear readability win
+- Emphasis feels materially louder than the source/reference
+- Callout syntax is likely to render literally instead of as a Feishu callout
+
 #### Task 5: Write to Feishu
 
 Determine the page title:
@@ -313,31 +409,26 @@ Determine the image directory:
 - If the markdown file references images with relative paths (e.g., `![](figures/fig1.png)`), set `IMAGE_DIR` to the directory containing the markdown file
 - If images use absolute paths or the document has no images, omit `--image-dir`
 
-Write the optimized content as a new sub-page under `PARENT_URL`:
+Create a sibling upload file and write the optimized content to it:
 
 ```bash
-# Step 1: Write optimized content to a temp file
-UPLOAD_TMP=$(mktemp /tmp/feishu_upload_XXXXXX.md)
-cat > "$UPLOAD_TMP" << 'FEISHU_CONTENT_END'
-[full optimized markdown content here — NO H1 line]
-FEISHU_CONTENT_END
+UPLOAD_MD="${MD_PATH%.md}_upload.md"
+cp "MD_PATH" "$UPLOAD_MD"
+# Edit $UPLOAD_MD directly so it contains the final upload body.
+# Important: remove the H1 title line from the body (title is passed via --title).
 
-# Step 2: Upload from file (auto-retries failed image uploads)
 python <skill-directory>/scripts/feishu_tool.py write PARENT_URL \
   --heading-color \
   --image-dir "IMAGE_DIR" \
   --title "TITLE" \
-  --input-file "$UPLOAD_TMP"
-
-# Step 3: Clean up temp file
-rm -f "$UPLOAD_TMP"
+  --input-file "$UPLOAD_MD"
 ```
 
 **Important notes:**
 - Always include `--heading-color` to auto-color headings by depth
 - Include `--image-dir` pointing to the markdown file's parent directory when images are present
 - **Do NOT include the `# Title` H1 line in the content body.** The title is set via `--title`. If H1 is in the body, heading depths shift by 1 and all headings get the wrong color.
-- Use `<< 'FEISHU_CONTENT_END'` (quoted delimiter) to prevent variable expansion
+- **Keep the generated `*_upload.md` file — do not delete it** so the upload artifact can be reviewed later
 - The `--input-file` approach avoids shell escaping issues and enables image upload auto-retry
 
 The script prints the URL of the newly created page. **Share this URL with the user.**
@@ -619,7 +710,7 @@ The script prints the new page URL to stdout.
 
 ## Action: sync
 
-Incremental sync — only copies new or modified pages on subsequent runs. State is persisted in `.feishu_sync_state/`.
+Incremental sync — only copies new or modified pages on subsequent runs. State is persisted in `~/log/feishu_tools/sync_logs/state/`.
 
 ```bash
 python <skill-directory>/scripts/feishu_tool.py sync SOURCE_URL TARGET_URL [options]
