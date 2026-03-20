@@ -230,7 +230,7 @@ Check the document against these specific format conventions:
 | Convention | Expected Pattern | Source Status |
 |------------|-----------------|---------------|
 | Opening callout | `[!callout]` with description + paper/repo links | Present? Missing? |
-| Numbered headings | `## 1 标题` / `### 1.1 子标题` | Correct numbering? Duplicates? |
+| Numbered headings | `## 1 标题` / `### 1.1 子标题` / `#### 1.1.1 三级子标题` | Correct numbering? Duplicates? |
 | Heading groups | Continuous numbering across whole doc (no resets) | Multiple `## 1` resets? |
 | Level conflicts | Group/chapter titles at correct level vs. sub-items | Any group title at same level as children? |
 | Callouts/quotes | `\|>` / `[!callout]` / `> 📌` freely throughout (5–15 per long doc) | Enough callouts? TL;DR blocks styled? |
@@ -287,7 +287,7 @@ Read [`references/conservative-edits.md`](<skill-directory>/references/conservat
    - If the source already has an intro `|>` quote container or a plain `>` blockquote that functions as the document summary (e.g., `> 一句话总结: ...`), move its text into the callout as a child paragraph and remove the original block
 
 2. **Heading restructuring** — Fix numbering AND hierarchy when needed:
-   - Apply **continuous sequential numbering** across the whole document (`## 1`, `## 2`, `## 3`…), not per-section resets
+   - Apply **continuous sequential numbering at all heading levels**: `## 1`, `## 2`… for top-level; `### 1.1`, `### 1.2`… for second-level; `#### 1.1.1`, `#### 1.1.2`… for third-level. Never leave any heading level unnumbered if its parent level is numbered.
    - **Number format**: Always use `## 1 Title` (number then space then title — **no period** after the number). The upload tool automatically colors the numeric prefix blue. Format `## 1. Title` (period after number) will NOT trigger auto-blue coloring.
    - **Heading groups**: If multiple sections each restart at "1.", "2."… choose:
      - *Elevate the group header*: if a heading logically contains sub-items also at the same level, promote it one level up
@@ -464,13 +464,16 @@ Light-touch optimization of a Feishu wiki document: fix errors, complete descrip
 
 ### Workflow
 
-Follow these 6 tasks in order:
+Follow these tasks in order:
 
 1. **Read Source** — Fetch and understand the source document
 2. **Read Reference** — Fetch and analyze the reference document's format
 3. **Format Analysis** — Compare structures and identify format gaps
 4. **Content Review** — Identify factual errors, incomplete descriptions, minor issues
 5. **Generate Optimized Version** — Apply light-touch improvements
+5.5. **Content Preservation Audit** — Verify no content was dropped or shortened
+5.6. **Emphasis Audit** — Verify color/bold density is appropriate
+5.7. **Rendered-Layout Regression Check** — Verify no visual regressions
 6. **Write to Feishu** — Create new sub-page with optimized content
 
 ### Task 1: Read Source Document
@@ -488,6 +491,7 @@ Save the full output. This is the document to optimize.
 - Content organization and flow
 - Level of detail in each section
 - Use of formatting (bold, lists, code blocks, etc.)
+- **Technical payload that must survive**: numbers, formulas, systems, complexity, deployment facts, experiment settings, citations, caveats, mechanism details
 
 **Record your observations** — you will need them in Task 5 to preserve the original character.
 
@@ -510,6 +514,13 @@ Save the full output. This is the format reference only — not a content source
 
 Read [`references/optimization-guide.md`](<skill-directory>/references/optimization-guide.md) for the detailed comparison framework and known reference format patterns.
 
+**Reference Discipline:**
+- The optimization guide is a style reference, not a license to restyle the document wholesale
+- Preserve the source document's macro-structure unless there is a clear formatting defect
+- Do not renumber or deepen the heading hierarchy just to match the reference pattern if the source already has a stable hierarchy
+- If an opening block, metadata block, or summary layout already works, prefer light cleanup over redesign
+- Prefer blockquote-style callouts that round-trip correctly in exported markdown
+
 Check the source document against these specific format conventions:
 
 | Convention | Expected Pattern | Source Status |
@@ -523,6 +534,13 @@ Check the source document against these specific format conventions:
 | Bold key terms | First mention of important technical terms bolded | Applied? |
 | Inline emphasis | `{red:...}` / `{red:**...**}` for key points (10–20× in a long doc); `{green:...}` for first-mention key terms (5–10×) | Enough red text? |
 | LaTeX equations | `$inline$` and `$$display$$` | Correct syntax? |
+| Formula placement | Formulas in normal paragraphs, not inside blockquotes/callouts | Any `$...$` inside `>`? |
+
+**Hard Constraints:**
+- Do **not** assume numbered headings are mandatory when the source already has a coherent hierarchy
+- Do **not** force extra subsection levels simply because the reference is more granular
+- Treat opening layout, metadata layout, and top-of-document summary layout as high-risk areas where over-editing is likely to regress the page
+- Prefer blockquote-style callouts that round-trip correctly in exported markdown
 
 **Important**: Only note FORMAT differences. Do not compare content topics.
 
@@ -571,7 +589,7 @@ The optimized document should be **80%+ identical** to the original. Changes sho
    - If the source already has an intro `|>` quote container or a plain `>` blockquote that functions as the document summary (e.g., `> 一句话总结: ...`), move its text into the callout as a child paragraph and remove the original block
 
 2. **Heading restructuring** — Fix numbering AND hierarchy when needed:
-   - Apply **continuous sequential numbering** across the whole document (`## 1`, `## 2`, `## 3`…), not per-section resets
+   - Apply **continuous sequential numbering at all heading levels**: `## 1`, `## 2`… for top-level; `### 1.1`, `### 1.2`… for second-level; `#### 1.1.1`, `#### 1.1.2`… for third-level. Never leave any heading level unnumbered if its parent level is numbered.
    - **Number format**: Always use `## 1 Title` (number then space then title — **no period** after the number). The upload tool automatically colors the numeric prefix blue. Format `## 1. Title` (period after number) will NOT trigger auto-blue coloring.
    - **Heading groups**: If multiple independent sections each restart at "1.", "2."…, choose a fix:
      - *Elevate the group header*: if a heading like `## 深度推导：…` logically contains sub-items also at `##`, promote it to `#` and demote sub-items to `##`
@@ -582,10 +600,21 @@ The optimized document should be **80%+ identical** to the original. Changes sho
 
 3. **Callouts and quote containers — use freely throughout the document**
    - **TL;DR blocks** → always convert to **blue callout**: `[!callout icon=bulb bg=2 border=2]` (NOT a `|>` quote container)
-   - **"一句话总结" / "一句话定位" / "核心思想" / "关键结论"** → always convert to **green callout**: `[!callout icon=pushpin bg=3 border=3]` (NOT a `|>` quote container)
+   - **"一句话总结" / "一句话定位" / "核心思想" / "关键结论"** → normally convert to **green callout**: `[!callout icon=pushpin bg=3 border=3]` (NOT a `|>` quote container); **exception**: if they contain `$...$`, `$$...$$`, or multiple inline equations, use normal body text or a nearby summary subsection instead
    - Add `|>` quote containers for other key insights, important observations, counterintuitive findings, and critical design decisions — no upper limit
    - Add `> 📌 **标题**: ...` blockquotes for critical facts and must-not-miss design decisions
    - A well-formatted long document should have **5–15 callouts/quote containers** spread across sections
+
+   **Feishu Callout Syntax Rules:**
+   - Use `> [!callout icon=...]` form, not a bare `[!callout ...]` line
+   - Keep the callout marker and its body in the same blockquote group
+   - If unsure whether a custom callout will round-trip correctly, use a plain `> 📌 ...` blockquote instead
+
+   **Formula Safety Rules:**
+   - Do **not** keep formula-bearing summaries inside blockquotes, callouts, or quote containers
+   - If a summary sentence contains LaTeX, place it as a normal paragraph or a nearby summary subsection
+   - If a sentence mixes prose and several formulas, prefer a normal paragraph
+   - If the formula is the main payload, prefer a lead-in sentence plus a standalone display equation block
 
 4. **Code block language tags** — Add missing language tags to bare code blocks
 
@@ -608,6 +637,8 @@ The optimized document should be **80%+ identical** to the original. Changes sho
 
    Rules:
    - Never mark entire paragraphs — but DO mark full key sentences/clauses that a reader must not miss
+   - Red emphasis is reserved for conclusions and consequences, not routine explanatory clauses
+   - Green emphasis is used on genuine first-mention concepts, not repeated on every prominent noun
 
 7. **Factual corrections** — Fix identified errors from Task 4
 
@@ -634,22 +665,59 @@ The optimized document should be **80%+ identical** to the original. Changes sho
 
 Produce the complete optimized markdown. Do NOT output a diff — output the full document.
 
+### Task 5.5: Content Preservation Audit
+
+Before proceeding to upload, check for:
+- Dropped bullets or list items
+- Shortened mechanism descriptions
+- Removed numbers, formulas, complexity, thresholds
+- Removed deployment/experiment/workload facts
+- Removed citations or named systems
+- Macro-structure drift: added or removed top-level sections, subsection splits, or heading renumbering not justified by a broken source
+- Opening-layout drift: title-adjacent summary, author/meta block, and first visual block still feel like the source rather than a template rewrite
+
+If any technical section is materially shorter, re-check it line by line.
+
+### Task 5.6: Emphasis Audit
+
+Before proceeding to upload, check for:
+- At least 1 red conclusion in each major section
+- Green first-mention highlights where new concepts appear
+- Bold structural anchors
+- Yellow highlights for caveats/tradeoffs where appropriate
+- Emphasis density still matches the source tone; remove highlights if the page starts to feel over-marked or noisier than the reference
+- Red emphasis is reserved for conclusions and consequences, not routine explanatory clauses
+- Green emphasis is used on genuine first-mention concepts, not repeated on every prominent noun
+
+### Task 5.7: Rendered-Layout Regression Check
+
+Visually inspect the final markdown and reject it if any of these regressions appear:
+- Opening callout or opening summary looks weaker than the source/reference
+- Top metadata collapses into stray lines or duplicated blocks
+- A clean source paragraph was turned into a noisier list, or a clean list into a denser paragraph
+- Headings became more numerous or deeper without a clear readability win
+- Emphasis feels materially louder than the source/reference
+- Callout syntax is likely to render literally instead of as a Feishu callout
+
 ### Task 6: Write to Feishu
 
 Determine an appropriate title. Use the source document's original title, optionally with a suffix.
 
-Write the optimized content as a new sub-page under the reference document:
+Determine the image directory:
+- If the source document contains images, the images were fetched from Feishu and may need re-upload. If you saved images locally during read, set `IMAGE_DIR` to their directory.
+- If no images are present, omit `--image-dir`.
+
+Write the optimized content to a temp file, then upload:
 
 ```bash
-# Step 1: Write optimized content to a temp file
+# Step 1: Write optimized content to a temp file using the Write tool
+# (write the full optimized markdown — NO H1 line — to this path)
 UPLOAD_TMP=$(mktemp /tmp/feishu_upload_XXXXXX.md)
-cat > "$UPLOAD_TMP" << 'FEISHU_CONTENT_END'
-[full optimized markdown content here — NO H1 line]
-FEISHU_CONTENT_END
 
 # Step 2: Upload from file (auto-retries failed image uploads)
 python <skill-directory>/scripts/feishu_tool.py write DEST_URL \
   --heading-color \
+  --image-dir "IMAGE_DIR" \
   --title "TITLE" \
   --input-file "$UPLOAD_TMP"
 
@@ -659,8 +727,8 @@ rm -f "$UPLOAD_TMP"
 
 **Important notes for writing:**
 - Always include `--heading-color` to auto-color headings by depth (required for visual formatting)
+- Include `--image-dir` when the document contains images; omit when it doesn't
 - **Do NOT include a `# Title` H1 line in the content body.** The page title is set via `--title`. If H1 is in the body, it shifts heading depth by 1 and all headings get the wrong color (orange instead of red for top-level `##` sections).
-- Use `<< 'FEISHU_CONTENT_END'` (quoted delimiter) to prevent variable expansion
 - The `--input-file` approach avoids shell escaping issues and enables image upload auto-retry
 
 The script prints the URL of the newly created page. **Share this URL with the user.**

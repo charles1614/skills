@@ -2368,6 +2368,9 @@ def _make_quote_container(children: list[dict]) -> dict:
     return block
 
 
+_MAX_TABLE_CREATE_ROWS = 9  # Feishu API limit: 1 header + 8 data rows via create_children
+
+
 def _make_table(rows: list[list[str]]) -> dict:
     """Create a table block (type 31) from parsed rows.
 
@@ -2375,13 +2378,19 @@ def _make_table(rows: list[list[str]]) -> dict:
     of block-lists (one per cell, row-major order).  ``write_blocks_to_doc``
     fills the auto-generated cells after the table is created.
 
+    Tables with more than _MAX_TABLE_CREATE_ROWS rows are split: the first
+    _MAX_TABLE_CREATE_ROWS rows are created normally; extra rows are stored in
+    ``_extra_rows`` and inserted later via InsertTableRowRequest (PATCH).
+
     The first row is marked as a header row with bold text.
     Column widths are distributed evenly across the page width.
     """
-    num_rows = len(rows)
     num_cols = max(len(r) for r in rows) if rows else 0
+    initial_rows = rows[:_MAX_TABLE_CREATE_ROWS]
+    extra_rows = rows[_MAX_TABLE_CREATE_ROWS:]
+
     cells_content: list[list[dict]] = []
-    for ri, row in enumerate(rows):
+    for ri, row in enumerate(initial_rows):
         for ci in range(num_cols):
             cell_text = row[ci].strip() if ci < len(row) else ""
             if cell_text:
@@ -2394,15 +2403,26 @@ def _make_table(rows: list[list[str]]) -> dict:
                 cells_content.append([para])
             else:
                 cells_content.append([])
-    return {
+
+    result: dict = {
         "block_type": 31,
         "table": {"property": {
             "column_size": num_cols,
-            "row_size": num_rows,
+            "row_size": len(initial_rows),
             "header_row": True,
         }},
         "_table_cells_content": cells_content,
     }
+    if extra_rows:
+        extra_cells: list[list[list[dict]]] = []
+        for row in extra_rows:
+            row_content: list[list[dict]] = []
+            for ci in range(num_cols):
+                cell_text = row[ci].strip() if ci < len(row) else ""
+                row_content.append([_make_paragraph(cell_text)] if cell_text else [])
+            extra_cells.append(row_content)
+        result["_extra_rows"] = extra_cells
+    return result
 
 
 def _parse_md_table(lines: list[str], start: int) -> tuple[dict | None, int]:
@@ -2759,6 +2779,7 @@ def write_blocks_to_doc(
     deferred_heading_bg: list[tuple[str, str]] = []  # (block_id, bg_color_str)
 
     failed_images: list[tuple[str, dict]] = []  # (block_id, info)
+    deferred_extra_rows: list[tuple[str, int, list[list[list[dict]]]]] = []  # (table_bid, num_cols, rows)
 
     while queue:
         next_queue: list[tuple[list[dict], str]] = []
@@ -2770,6 +2791,7 @@ def write_blocks_to_doc(
             clean_blocks: list[dict] = []
             children_map: list[list[dict] | None] = []
             table_cells_map: list[list[list[dict]] | None] = []
+            extra_rows_map: list[list[list[list[dict]]] | None] = []
             bg_color_map: list[str | None] = []
             image_data_map: list[dict | None] = []
             for b in block_list:
@@ -2777,6 +2799,8 @@ def write_blocks_to_doc(
                 children_map.append(children)
                 table_cells = b.pop("_table_cells_content", None)
                 table_cells_map.append(table_cells)
+                extra_rows = b.pop("_extra_rows", None)
+                extra_rows_map.append(extra_rows)
                 bg_color = b.pop("_bg_color", None)
                 bg_color_map.append(bg_color)
                 img_info = None
@@ -2799,6 +2823,7 @@ def write_blocks_to_doc(
                 batch = clean_blocks[batch_start : batch_start + 10]
                 batch_children = children_map[batch_start : batch_start + 10]
                 batch_table = table_cells_map[batch_start : batch_start + 10]
+                batch_extra = extra_rows_map[batch_start : batch_start + 10]
 
                 created = create_children(user_token, doc_id, parent_id, batch, index=insert_pos)
                 result.blocks_created += len(created)
@@ -2831,6 +2856,11 @@ def write_blocks_to_doc(
                         num_cols = new_blk.get("table", {}).get("property", {}).get("column_size", 0)
                         if num_cols > 0:
                             deferred_table_widths.append((new_blk["block_id"], num_cols))
+                    # Track tables with extra rows for deferred InsertTableRowRequest
+                    if (j < len(batch_extra) and batch_extra[j]
+                            and new_blk.get("block_type") == 31):
+                        nc = new_blk.get("table", {}).get("property", {}).get("column_size", 0)
+                        deferred_extra_rows.append((new_blk["block_id"], nc, batch_extra[j]))
                     # Handle table cell filling
                     if j < len(batch_table) and batch_table[j]:
                         cell_ids = new_blk.get("table", {}).get("cells", [])
@@ -2908,6 +2938,30 @@ def write_blocks_to_doc(
         else:
             result.table_patches_failed += 1
         time.sleep(0.3)
+
+    # Insert extra table rows via InsertTableRowRequest (for tables > _MAX_TABLE_CREATE_ROWS rows)
+    for table_bid, num_cols, extra_rows in deferred_extra_rows:
+        for row_idx, row_cells in enumerate(extra_rows):
+            try:
+                patch_block(user_token, doc_id, table_bid,
+                            {"insert_table_row": {"row_index": -1}})
+                time.sleep(0.3)
+                # Get updated children list to find new cell block IDs
+                table_blk = get_block(user_token, doc_id, table_bid)
+                all_cell_ids = (table_blk.get("table", {}).get("cells", [])
+                                or table_blk.get("children", []))
+                new_cell_ids = all_cell_ids[-num_cols:] if num_cols else []
+                for ci, cell_id in enumerate(new_cell_ids):
+                    if ci < len(row_cells) and row_cells[ci]:
+                        try:
+                            create_children(user_token, doc_id, cell_id, row_cells[ci])
+                            time.sleep(0.2)
+                        except Exception as ce:
+                            log.warning("  Extra row cell fill failed %s[%d]: %s", cell_id, ci, ce)
+                log.debug("  Inserted extra row %d into table %s", row_idx, table_bid)
+            except Exception as e:
+                log.warning("  InsertTableRow failed for %s row %d: %s", table_bid, row_idx, e)
+                result.blocks_failed += 1
 
     return result
 

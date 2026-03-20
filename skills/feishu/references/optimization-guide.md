@@ -6,27 +6,34 @@ The following conventions were observed across multiple well-formatted reference
 
 ### Opening Callout
 
-Every document starts with a callout block (blockquote in markdown) containing:
-- A 📌 emoji prefix
+Every document starts with a `[!callout]` block containing:
+- An appropriate icon (e.g. `gift`, `bulb`, `bookmark`, `pushpin`, `rocket`, `star`)
 - **Paper/resource links**: Paper title linked to arXiv/publication, GitHub repo link
 - **Related doc links**: Cross-references to related wiki pages
 
 Example:
 ```markdown
-> 📌 **Paper**: [FlashAttention: Fast and Memory-Efficient Exact Attention](https://arxiv.org/abs/2205.14135)
+> [!callout icon=gift bg=2 border=2]
+> 本文档介绍 FlashAttention 的核心思想与实现细节。
+>
+> **Paper**: [FlashAttention: Fast and Memory-Efficient Exact Attention](https://arxiv.org/abs/2205.14135)
+>
 > **Code**: [GitHub](https://github.com/Dao-AILab/flash-attention)
+>
 > **Related**: [FlashAttention-2 解读](link), [Memory-Efficient Attention](link)
 ```
 
 ### Numbered Headings
 
-Sections use explicit numbering in the heading text:
+Sections use explicit numbering in the heading text — **all three levels must be numbered**:
 - `## 1 第一节标题` (top-level sections)
-- `### 1.1 子节标题` (subsections)
+- `### 1.1 子节标题` (second-level subsections)
 - `### 1.2 另一个子节` (next subsection)
+- `#### 1.1.1 三级子节` (third-level subsections)
+- `#### 1.1.2 另一个三级子节` (next third-level)
 - `## 2 第二节标题` (next top-level)
 
-Numbers are part of the heading text, not auto-generated. Ensure numbering is sequential with no duplicates.
+Numbers are part of the heading text, not auto-generated. Ensure numbering is sequential with no duplicates. **If any `##` heading is numbered, all `###` children must also be numbered, and all `####` grandchildren must also be numbered.** Never leave a heading level unnumbered when its parent level is numbered.
 
 ### Callout Blocks for Key Concepts
 
@@ -86,7 +93,7 @@ When comparing source and reference documents, work through these dimensions sys
 
 | Check | What to look for |
 |-------|-----------------|
-| Numbering | Does source use `## 1`, `### 1.1` pattern? Are numbers sequential and continuous? |
+| Numbering | Does source use `## 1`, `### 1.1`, `#### 1.1.1` pattern at all three levels? Are numbers sequential and continuous? |
 | Depth | Does source match reference's hierarchy depth? |
 | Duplicates | Any duplicate section numbers (e.g., two `## 5` sections)? |
 | Group resets | Does numbering restart in multiple places (first `## 1, 2, 3`, then another `## 1, 2, 3`)? |
@@ -162,7 +169,7 @@ A document has a **heading group conflict** when:
    - ✅ `通过 {green:selective recomputation}（选择性重计算）、{green:fine-grained activation offloading}（细粒度激活卸载）和 {green:precision-aware optimizer}`
    - This applies to any "A（中文A）、B（中文B）和 C" enumeration pattern where each item is a distinct technique
 
-5. **LaTeX compatibility** — **NEVER place a LaTeX math expression (`$...$` or `$$...$$`) inside a color marker.** The inline equation parser and the color parser conflict, causing the formula to lose color or render incorrectly. If the phrase you want to highlight contains a formula, split the color around it:
+6. **LaTeX compatibility** — **NEVER place a LaTeX math expression (`$...$` or `$$...$$`) inside a color marker.** The inline equation parser and the color parser conflict, causing the formula to lose color or render incorrectly. If the phrase you want to highlight contains a formula, split the color around it:
    - ❌ `{red:打破传统 $\text{EP}\leq\text{DP}$ 约束}`
    - ✅ `{red:打破传统} $\text{EP}\leq\text{DP}$ {red:约束}`
    - For simple math that can be written without LaTeX (e.g., `18×`), use the Unicode symbol directly inside the color marker: `{red:18× 差距}`
@@ -221,17 +228,20 @@ Lead-in sentence stays as a paragraph above the list. Each item gets a bold labe
 
 ## 5. Tables
 
-**Feishu API hard limits — violating these causes `1770001: invalid param`:**
+**Feishu API table limits (empirically confirmed):**
 
-| Limit | Value | Action if exceeded |
-|-------|-------|--------------------|
-| Max columns | **6** | Split into multiple tables or restructure as list |
-| Max rows | **8** (data rows) | Split into multiple tables |
-| Max cells | **48** (6 cols × 8 rows) | Apply both limits |
+| Limit | Value | Handled automatically? |
+|-------|-------|------------------------|
+| Max columns (create) | **9** | No — must split |
+| Max data rows (create) | **8** | Yes — tool auto-inserts extra rows via `InsertTableRowRequest` |
 
-**When to split**: A table with N data rows > 8 must be split. Add a heading or label before each sub-table to indicate what it covers.
+The `create_children` API enforces these limits (`1770001: invalid param` if exceeded). For rows, `feishu_tool.py` transparently handles tables with more than 8 data rows by inserting extra rows one-by-one after creation. For columns, splitting is still required.
 
-**When NOT to split**: Don't artificially split a 7-row table — only split when required by the limit.
+Note: tables created via the Feishu web UI may exceed these limits — the API `create_children` endpoint enforces stricter limits than the UI.
+
+**When to split**: Only split tables when they exceed **9 columns**, or when it makes logical sense to group rows under different sub-labels (e.g., splitting a mixed table by model family). Do **not** split tables just because they have many rows.
+
+**When NOT to split**: Don't split a table just because it has many rows — the tool handles this automatically.
 
 ## 6. Code Blocks
 
