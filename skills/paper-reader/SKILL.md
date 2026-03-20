@@ -243,36 +243,21 @@ After receiving the haiku verification report, the main model reviews and acts o
 
 ### Step 4: Derive Markdown from LaTeX
 
-After the PDF compiles successfully, derive the `.md` file from the `.tex` source. This is a **mechanical conversion** — do not re-analyze the paper or generate new content.
+After the PDF compiles successfully, run the conversion script to produce the `.md` file:
 
-Apply these transformations to the `.tex` content:
+```bash
+python3 <skill-directory>/scripts/tex2md.py <output_dir>/<filename>.tex <output_dir>/<filename>.md
+```
 
-| LaTeX | Markdown |
-|-------|----------|
-| `\section{X}` | `# X` |
-| `\subsection{X}` | `## X` |
-| `\subsubsection{X}` | `### X` |
-| `\paragraph{X}` + body | blank line + `**X**` + blank line + body |
-| `\textbf{X}` | `**X**` |
-| `\begin{itemize}` ... `\item X` | `- X` |
-| `\begin{enumerate}` ... `\item X` | `1. X` |
-| `\begin{keyinsight}[TL;DR]` ... `\end{keyinsight}` | `> TL;DR: ...` |
-| `\begin{keyinsight}[📌 标题]` ... `\end{keyinsight}` | `> 📌 **标题**: ...` |
-| `\begin{strengthbox}` / `\begin{weaknessbox}` | keep as bullet lists |
-| `\begin{mathbox}[Title]` ... `\end{mathbox}` | `$$...$$` with equations |
-| `\begin{equation}` ... `\end{equation}` | `$$...$$` |
-| `\begin{table}` with `tabular` | Markdown table (`\|---\|`) |
-| `\begin{infobox}[T]` with `tabular` | Markdown table |
-| `\includegraphics{figures/X.png}` + `\caption{Y}` | `![Y](figures/X.png)` |
-| `\gmark{X}` / `\rmark{X}` / `\omark{X}` | `**X**` |
-| `~` (non-breaking space) | regular space |
-| `\label{...}`, `\ref{...}` | strip entirely |
-| `如图~\ref{fig:X} 所示` | remove the reference clause |
-| `--` / `---` | `–` / `—` |
-| `\%` | `%` |
-| `''` (TeX right quotes) / ` `` ` (TeX left quotes) | `"` |
+The script handles all environments from the template (sections, keyinsight/mathbox/infobox tcolorboxes, figure, table/tabular, itemize/enumerate, equation/align, lstlisting) and exits with code 1 if any `\includegraphics` in the `.tex` is missing from the output `.md`. If it exits 1, read the error output — it prints the missing figure paths — and investigate why those figure environments were not processed.
 
-Write the resulting `.md` file into the same subfolder as the `.tex` file.
+The script output looks like:
+```
+Written : /path/to/filename.md
+Figures : 9 in .tex, 9 in .md
+```
+
+**Do not derive the Markdown manually.** The script is deterministic and will never drop figures.
 
 ### Step 5: Report Results
 
