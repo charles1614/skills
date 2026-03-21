@@ -242,7 +242,9 @@ Check the document against these specific format conventions:
 
 **Hard Constraints:**
 - Do **not** assume numbered headings are mandatory when the source already has a coherent hierarchy
+- **Exception — Chinese ordinal headings are always a defect**: `## 一、`, `## 二、`, `## 三、`… use Chinese characters that do NOT trigger the tool's blue-number coloring. Always convert to `## 1 Title`, `## 2 Title`… format. This is not optional.
 - Do **not** force extra subsection levels simply because the reference is more granular
+- **All siblings at the same heading level must be consistently numbered or consistently unnumbered.** A lone unnumbered heading (e.g., `## Cheatsheet`) among numbered siblings must be assigned the next sequential number.
 - Treat opening layout, metadata layout, and top-of-document summary layout as high-risk areas where over-editing is likely to regress the page
 - Prefer blockquote-style callouts that round-trip correctly in exported markdown
 
@@ -349,7 +351,9 @@ Read [`references/conservative-edits.md`](<skill-directory>/references/conservat
    - Add only information that is clearly implied or factually obvious
    - Do NOT fabricate details or add your own opinions
 
-9. **Intelligent list conversion** — Dense paragraphs that enumerate items should be broken into structured lists:
+9. **Ordered list numbering** — Feishu does NOT auto-renumber ordered list items. If the source markdown uses `1.` for every item (a common Markdown habit), all items render as "1." in Feishu. Always use explicit sequential numbers: `1.`, `2.`, `3.`, `4.`…
+
+10. **Intelligent list conversion** — Dense paragraphs that enumerate items should be broken into structured lists:
    - **When to convert**: A paragraph listing 3+ items/features/components with descriptions, separated by 、/；/semicolons, or using "A: desc, B: desc, C: desc" structure
    - **Format**: Bullet list with bold lead-ins: `- **ItemName**: description`
    - **When NOT to convert**: Items are very short (1–2 words) with no descriptions — keep as inline list. Also keep as paragraph if the enumeration is embedded in narrative flow.
@@ -538,7 +542,9 @@ Check the source document against these specific format conventions:
 
 **Hard Constraints:**
 - Do **not** assume numbered headings are mandatory when the source already has a coherent hierarchy
+- **Exception — Chinese ordinal headings are always a defect**: `## 一、`, `## 二、`, `## 三、`… use Chinese characters that do NOT trigger the tool's blue-number coloring. Always convert to `## 1 Title`, `## 2 Title`… format. This is not optional.
 - Do **not** force extra subsection levels simply because the reference is more granular
+- **All siblings at the same heading level must be consistently numbered or consistently unnumbered.** A lone unnumbered heading (e.g., `## Cheatsheet`) among numbered siblings must be assigned the next sequential number.
 - Treat opening layout, metadata layout, and top-of-document summary layout as high-risk areas where over-editing is likely to regress the page
 - Prefer blockquote-style callouts that round-trip correctly in exported markdown
 
@@ -646,7 +652,9 @@ The optimized document should be **80%+ identical** to the original. Changes sho
    - Add only information that is clearly implied or factually obvious
    - Do NOT fabricate details or add your own opinions
 
-9. **Intelligent list conversion** — Dense paragraphs that enumerate items should be broken into structured lists:
+9. **Ordered list numbering** — Feishu does NOT auto-renumber ordered list items. If the source markdown uses `1.` for every item (a common Markdown habit), all items render as "1." in Feishu. Always use explicit sequential numbers: `1.`, `2.`, `3.`, `4.`…
+
+10. **Intelligent list conversion** — Dense paragraphs that enumerate items should be broken into structured lists:
    - **When to convert**: A paragraph listing 3+ items/features/components with descriptions, separated by 、/；/semicolons
    - **Format**: Bullet list with bold lead-ins: `- **ItemName**: description`
    - **When NOT to convert**: Items are very short with no descriptions, or the enumeration is embedded in narrative flow
