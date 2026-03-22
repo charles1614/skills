@@ -22,6 +22,8 @@ This skill's supporting files are located relative to this SKILL.md:
 - `scripts/setup-tex.sh` — One-time TeX package installer
 - `scripts/extract_figures.py` — Smart PDF figure extraction (uses PyMuPDF: caption detection + region rendering)
 - `scripts/extract_text.py` — PDF text layer extraction (uses PyMuPDF: page-delimited plain text for grep-based verification)
+- `scripts/verify_extraction.py` — Figure extraction quality verification (OCR-based boundary detection checking)
+- `VERIFICATION.md` — Documentation for the figure extraction verification tool
 
 **IMPORTANT**: At the start of every invocation, read `references/analysis-prompt.md` to load the full analysis structure and guidelines. This is mandatory — do not rely on memory of the prompt.
 
@@ -99,6 +101,32 @@ Extract figures **automatically** — no manual review unless extraction fails:
    - Overview/pipeline figures → Section 2: 核心摘要与定性评估
 
    **Do NOT review every figure individually** unless extraction reported errors. Trust the script output and proceed to analysis.
+
+### Step 1.6: Verify Figure Extraction Quality (Optional but Recommended)
+
+**Depends on**: Step 1.5 must complete first (needs `figures/` directory).
+
+Verify that extracted figures have correct boundaries and no body text leakage using the automated verification tool:
+
+```
+python3 <skill-directory>/scripts/verify_extraction.py <output_dir>/
+```
+
+This tool checks for:
+- **Body text misclassification** — prose paragraphs captured as figures
+- **Page header leakage** — running headers included in figures
+- **Wrong panel mixing** — tables and plots combined into one figure
+- **Text clipping** — important labels or annotations missing
+- **Caption leakage** — figure captions included in figure images
+
+**Action based on results:**
+- ✅ **All clean** → Proceed to Step 1.7
+- 🟡 **Medium issues** → Document in analysis, proceed
+- 🔴 **Critical issues** → Manually inspect affected figures before proceeding; note issues in the analysis report
+
+Output is saved to `<output_dir>/verification_report.json`.
+
+For detailed usage and troubleshooting, see `VERIFICATION.md` in this skill's directory.
 
 ### Step 1.7: Extract Figure Text (via haiku)
 
