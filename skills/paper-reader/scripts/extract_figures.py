@@ -231,10 +231,14 @@ def _detect_page_header_bottom(page):
     except Exception:
         return 40
 
-    # Look for a thin horizontal rule near the top spanning most of the page
+    # Look for a thin horizontal rule near the top spanning most of the page.
+    # Threshold is adaptive: headers appear in top 10% of page height.
+    # This handles PDFs where header rules appear at y=65 on 841pt pages.
+    header_threshold = page.rect.height * 0.10  # top 10% of page
+
     for d in drawings:
         r = d["rect"]
-        if r.y0 < 60 and r.height < 3 and r.width > page.rect.width * 0.7:
+        if r.y0 < header_threshold and r.height < 3 and r.width > page.rect.width * 0.7:
             return r.y1 + 2
 
     return 40
@@ -295,10 +299,22 @@ def find_figure_captions(page, page_num):
             # Accept if every preceding line in the block is a short label
             # (≤ 30 chars).  Body paragraphs that happen to wrap a "Figure N"
             # mention onto its own line will have a longer preceding line.
-            preceding_ok = all(
-                len("".join(s["text"] for s in prev["spans"]).strip()) <= 30
-                for prev in block["lines"][:line_idx]
-            )
+            # Also reject if a preceding line looks like a section header
+            # (e.g., "Qualitative Results." — all caps or title case ending with period).
+            preceding_ok = True
+            for prev in block["lines"][:line_idx]:
+                prev_text = "".join(s["text"] for s in prev["spans"]).strip()
+                prev_len = len(prev_text)
+                if prev_len > 30:
+                    preceding_ok = False
+                    break
+                # Reject if preceding line looks like a section header:
+                # ends with period, contains no lowercase letters (all CAPS)
+                # or matches title case pattern (Word.).
+                if (prev_text.endswith(".") and prev_len >= 4 and
+                    (prev_text.isupper() or re.match(r"^[A-Z][a-z]+\s+[A-Z]", prev_text))):
+                    preceding_ok = False
+                    break
             if not preceding_ok:
                 continue
 
