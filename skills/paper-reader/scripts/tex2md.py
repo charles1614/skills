@@ -398,11 +398,11 @@ class Converter:
         non_blank = [l for l in inner if l]
 
         if title in ('TL;DR', 'TL; DR'):
-            label = '📌 **TL;DR**'
+            label = '**TL;DR**'
         elif title == '一句话总结':
-            label = '📌 **一句话总结**'
+            label = '**一句话总结**'
         else:
-            label = f'📌 **{title}**'
+            label = f'**{title}**'
 
         if len(non_blank) <= 1:
             content = non_blank[0] if non_blank else ''
@@ -613,15 +613,18 @@ def main() -> None:
     md = Converter().convert(tex)
     md_path.write_text(md, encoding='utf-8')
 
-    # Figure count verification
+    # Figure count verification. Don't anchor the markdown image regex to
+    # line start — figure environments may emit images with leading
+    # whitespace (e.g., when wrapped in a list), and an over-strict anchor
+    # would falsely report missing figures.
     tex_figs = len(re.findall(r'\\includegraphics', tex))
-    md_figs = len(re.findall(r'^!\[', md, re.MULTILINE))
+    md_figs = len(re.findall(r'!\[', md))
     print(f"Written : {md_path}", file=sys.stderr)
     print(f"Figures : {tex_figs} in .tex, {md_figs} in .md", file=sys.stderr)
 
     if tex_figs != md_figs:
         tex_paths = re.findall(r'\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}', tex)
-        md_paths  = re.findall(r'^!\[[^\]]*\]\(([^)]+)\)', md, re.MULTILINE)
+        md_paths  = re.findall(r'!\[[^\]]*\]\(([^)]+)\)', md)
         missing = sorted(set(tex_paths) - set(md_paths))
         if missing:
             print(f"ERROR   : missing in .md: {', '.join(missing)}", file=sys.stderr)

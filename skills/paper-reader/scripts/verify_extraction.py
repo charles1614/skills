@@ -19,9 +19,24 @@ import os
 import sys
 import json
 from pathlib import Path
-from PIL import Image
-import pytesseract
 from collections import defaultdict
+
+try:
+    from PIL import Image
+except ImportError:
+    print("ERROR: Pillow not installed. Run: pip install pillow", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    import pytesseract
+except ImportError:
+    print(
+        "ERROR: pytesseract not installed. Run: pip install pytesseract\n"
+        "       Also ensure the 'tesseract' binary is on PATH "
+        "(e.g., apt install tesseract-ocr).",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 class FigureVerifier:
     """Verify extracted figures for boundary detection issues."""
@@ -82,20 +97,36 @@ class FigureVerifier:
         return body_indicators >= 2
 
     def check_page_header_patterns(self, text):
-        """Detect page header patterns."""
+        """Detect generic page header / preprint metadata leakage.
+
+        Hardcoding paper-specific titles ("FlashAttention", "DriveLaW", etc.)
+        only catches a handful of papers. Use generic patterns that recur
+        across academic preprints: arXiv stamps, page numbers, conference
+        venues, "Preprint", "Under review", etc.
+        """
+        import re
+        # Each entry: (regex, label). Patterns are case-sensitive where the
+        # canonical form is fixed (arXiv) and case-insensitive otherwise.
         header_patterns = [
-            "Attention Residuals",
-            "Technical Report",
-            "arXiv",
-            "SOSP",
-            "FlashAttention",
-            "DriveLaW",
-            "DualPath",
+            (re.compile(r"arXiv:\d{4}\.\d{4,5}(v\d+)?"), "arXiv stamp"),
+            (re.compile(r"\bPreprint\b", re.IGNORECASE), "Preprint marker"),
+            (re.compile(r"\bUnder review\b", re.IGNORECASE), "Under-review marker"),
+            (re.compile(r"\bWork in progress\b", re.IGNORECASE), "WIP marker"),
+            (re.compile(r"\bTechnical Report\b", re.IGNORECASE), "Technical Report header"),
+            (re.compile(r"\bAccepted (at|to) "), "Acceptance notice"),
+            (re.compile(r"\bPublished as a conference paper at "), "Conference notice"),
+            (re.compile(r"\bConference on \w+"), "Conference name"),
+            (re.compile(r"\bProceedings of "), "Proceedings header"),
+            (re.compile(r"^\s*\d+\s*$", re.MULTILINE), "Standalone page number"),
         ]
 
-        for pattern in header_patterns:
-            if pattern in text and text.find(pattern) < len(text) * 0.2:  # Near top
-                return True, pattern
+        # Only consider matches in the top 20% of the OCR'd text.
+        cutoff = max(1, int(len(text) * 0.2))
+        head = text[:cutoff]
+        for pat, label in header_patterns:
+            m = pat.search(head)
+            if m:
+                return True, f"{label}: {m.group(0)[:60]}"
 
         return False, None
 
@@ -190,13 +221,13 @@ class FigureVerifier:
     def verify_all(self):
         """Verify all figures in the paper."""
         if not self.figures_dir.exists():
-            print(f"❌ No figures directory found in {self.paper_path}")
+            print(f"[ERROR] No figures directory found in {self.paper_path}")
             return False
 
         figure_files = sorted(self.figures_dir.glob("fig*.png"))
 
         if not figure_files:
-            print(f"❌ No figures found in {self.figures_dir}")
+            print(f"[ERROR] No figures found in {self.figures_dir}")
             return False
 
         print(f"\n{'='*70}")
@@ -229,7 +260,8 @@ class FigureVerifier:
             # Print by severity
             for severity in ['CRITICAL', 'HIGH', 'MEDIUM', 'INFO']:
                 if severity in by_severity:
-                    symbol = {'CRITICAL': '🔴', 'HIGH': '🟠', 'MEDIUM': '🟡', 'INFO': '🔵'}[severity]
+                    symbol = {'CRITICAL': '[CRIT]', 'HIGH': '[HIGH]',
+                              'MEDIUM': '[MED] ', 'INFO': '[INFO]'}[severity]
                     print(f"{symbol} {severity}")
                     for fig, issue in by_severity[severity]:
                         print(f"  {fig}: {issue['description']}")
@@ -238,8 +270,8 @@ class FigureVerifier:
         print(f"Clean Figures: {len(self.clean_figures)}/{total}")
         print(f"Issues Found: {len(self.issues)}/{total}")
 
-        if len(self.clean_figures) == total:
-            print("\n✅ All figures passed verification!")
+        if total > 0 and len(self.clean_figures) == total:
+            print("\n[OK] All figures passed verification!")
 
         return {
             'total_figures': total,
@@ -259,7 +291,7 @@ def main():
     paper_path = Path(sys.argv[1])
 
     if not paper_path.exists():
-        print(f"❌ Paper directory not found: {paper_path}")
+        print(f"[ERROR] Paper directory not found: {paper_path}")
         sys.exit(1)
 
     verifier = FigureVerifier(paper_path)
@@ -271,8 +303,14 @@ def main():
         report_file = paper_path / "verification_report.json"
         with open(report_file, 'w') as f:
             json.dump(results, f, indent=2)
-        print(f"\n📄 Report saved to: {report_file}")
+        print(f"\nReport saved to: {report_file}")
 
+        # Exit non-zero on issues OR if no figures were checked at all —
+        # silent exit 0 with zero figures is a false success signal.
+        if results['total_figures'] == 0:
+            print("[ERROR] 0 figures verified — extraction likely failed",
+                  file=sys.stderr)
+            sys.exit(1)
         sys.exit(0 if results['issues'] == 0 else 1)
     else:
         sys.exit(1)
