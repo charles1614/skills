@@ -22,8 +22,8 @@ This skill's supporting files are located relative to this SKILL.md:
 - `scripts/setup-tex.sh` — One-time TeX package installer
 - `scripts/extract_figures.py` — Smart PDF figure extraction (uses PyMuPDF: caption detection + region rendering)
 - `scripts/extract_text.py` — PDF text layer extraction (uses PyMuPDF: page-delimited plain text for grep-based verification)
-- `scripts/verify_extraction.py` — Figure extraction quality verification (OCR-based boundary detection checking)
-- `VERIFICATION.md` — Documentation for the figure extraction verification tool
+- `scripts/validate_figures.py` — PDF-structure-based figure quality checks (default verifier; no extra deps)
+- `scripts/verify_extraction.py` — OCR-based deep diagnostics (optional; requires tesseract)
 
 **IMPORTANT**: At the start of every invocation, read `references/analysis-prompt.md` to load the full analysis structure and guidelines. This is mandatory — do not rely on memory of the prompt.
 
@@ -102,31 +102,33 @@ Extract figures **automatically** — no manual review unless extraction fails:
 
    **Do NOT review every figure individually** unless extraction reported errors. Trust the script output and proceed to analysis.
 
-### Step 1.6: Verify Figure Extraction Quality (Optional but Recommended)
+4. **Manifest schema** (`figures_manifest.json`): each entry has `fig_num`, `filename`, `caption` (full multi-line caption text, joined with spaces, ≤250 chars — much richer than just "Figure N:"), `page`, `width`, `height`, `n_image_blocks`, `n_drawings`, `render_type`, `clip_rect`, `caption_bbox`. When the extractor is uncertain about a region (no visual content + extreme aspect ratio, or the 70 %-page-height cap kicked in), it adds `"suspect": true` and `"suspect_reason": "..."`. Use the `caption` field as authoritative figure description (avoid re-deriving from OCR), and treat `suspect: true` figures as low-confidence in the analysis.
 
-**Depends on**: Step 1.5 must complete first (needs `figures/` directory).
+### Step 1.6: Validate Figure Extraction Quality
 
-Verify that extracted figures have correct boundaries and no body text leakage using the automated verification tool:
+**Depends on**: Step 1.5 must complete first (needs `figures/` directory and `figures_manifest.json`).
+
+Run the structure-based validator on the extracted figures:
 
 ```
-python3 <skill-directory>/scripts/verify_extraction.py <output_dir>/
+python3 <skill-directory>/scripts/validate_figures.py <output_dir>/
 ```
 
-This tool checks for:
-- **Body text misclassification** — prose paragraphs captured as figures
-- **Page header leakage** — running headers included in figures
-- **Wrong panel mixing** — tables and plots combined into one figure
-- **Text clipping** — important labels or annotations missing
-- **Caption leakage** — figure captions included in figure images
+This is a fast, dependency-free check that reads the manifest and the source PDF and surfaces:
+- **Body text leakage** — prose paragraphs captured at the top or bottom of a figure
+- **Page header artifacts** — running headers / arXiv stamps included in the clip
+- **Caption mismatch** — in-text figure references mistaken for the real caption
+- **Partial capture** — missing subfigure panels (e.g., subfigure label "(c)" present but not rendered)
+- **Aspect-ratio anomalies** — extreme width or height suggesting a pseudo-figure
+- **Numbering gaps** — missing or duplicate `fig_num` in the manifest
+- **Extractor suspect flags** — figures where `extract_figures.py` itself flagged the rendered region as low-confidence (no visual elements + extreme aspect, or the 70 %-page-height cap was triggered)
 
 **Action based on results:**
-- ✅ **All clean** → Proceed to Step 1.7
-- 🟡 **Medium issues** → Document in analysis, proceed
-- 🔴 **Critical issues** → Manually inspect affected figures before proceeding; note issues in the analysis report
+- All clean → proceed to Step 1.7
+- MEDIUM issues → note them in the analysis, proceed
+- HIGH / CRITICAL issues → visually inspect the listed figures before continuing; record the limitation in the analysis report
 
-Output is saved to `<output_dir>/verification_report.json`.
-
-For detailed usage and troubleshooting, see `VERIFICATION.md` in this skill's directory.
+Optional deeper OCR-based diagnostics are available via `scripts/verify_extraction.py` (requires `tesseract-ocr` and `pytesseract`). Use only when `validate_figures.py` flags something ambiguous.
 
 ### Step 1.7: Extract Figure Text (via haiku)
 
@@ -139,6 +141,7 @@ Launch a Task agent with `model: "haiku"` and `subagent_type: "general-purpose"`
 ```
 Read each figure image in <output_dir>/figures/ using the Read tool (it supports PNG images).
 Also read <output_dir>/figures/figures_manifest.json to get caption and page info for each figure.
+The `caption` field in the manifest now contains the FULL multi-line caption text (joined with spaces, ≤250 chars), so you do not need to re-derive captions from the image — focus the OCR pass on labels and numbers that don't appear in the caption.
 
 For each figure, write down ALL visible text: labels, numbers, annotations, flow chart box text,
 axis labels, table cells, legend text. Be thorough — even small numbers matter.
@@ -162,6 +165,8 @@ This file is small (~500 tokens of labels/numbers) and serves as supplementary e
 **The `.tex` file is the source of truth.** Write it directly — do NOT write Markdown first.
 
 **CRITICAL: Use extracted text as ground truth during writing.** For any factual claim you write — especially training configuration (optimizer, learning rate, batch size, compute), system parameters (dimensions, layer counts), and experimental numbers — **grep `paper_text.txt` first** to verify the claim exists in the paper's prose. If the info is not found in `paper_text.txt`, check `paper_figures_text.txt` for figure-only info. If not found in either, do NOT write the claim — either omit it or explicitly mark as「原文未明确提及」. The visual PDF reading provides understanding of structure, figures, and formulas; the extracted text files are the authoritative source for factual claims.
+
+**Flag suspect figures.** If `figures_manifest.json` marks any figure as `"suspect": true`, mention it briefly in the analysis where the figure is embedded — e.g., "（图~\ref{fig:foo} 的自动抽取存疑：{suspect_reason}，建议读者直接查阅原文图片）". Do not silently embed a suspect figure as if it were authoritative.
 
 1. Read the full analysis prompt from `references/analysis-prompt.md` in this skill's directory
 2. Read the LaTeX template from `assets/template.tex` and the guide from `references/latex-guide.md`
