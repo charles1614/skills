@@ -109,11 +109,10 @@
   }%
 }
 
-\titleformat{\section}[block]
+\titleformat{\section}
   {\Large\bfseries\sffamily\color{PrimaryBlue}}
   {\sectionbadge{\thesection}}{0.7em}{}
-  [\vspace{-0.2ex}{\color{AccentTeal!70}\rule{\textwidth}{0.6pt}}%
-   \vspace{-0.2ex}{\color{AccentTeal!25}\rule{\textwidth}{0.3pt}}]
+  [\vspace{-0.2ex}{\color{AccentTeal!60}\rule{\textwidth}{0.5pt}}]
 
 \titleformat{\subsection}
   {\large\bfseries\sffamily\color{PrimaryBlue!85!black}}
@@ -357,16 +356,22 @@
 \renewcommand{\contentsname}{\color{PrimaryBlue}\sffamily 目\quad 录}
 
 \titlecontents{section}[0em]
-  {\addvspace{4pt}\sffamily\bfseries\color{PrimaryBlue}}
+  {\addvspace{2pt}\sffamily\bfseries\color{PrimaryBlue}}
   {\contentslabel{1.6em}}
   {\hspace*{-1.6em}}
   {\titlerule*[0.6pc]{\color{SubtleGray!50}.}\contentspage}
 
-\titlecontents{subsection}[2.2em]
+\titlecontents{subsection}[2.0em]
   {\small\sffamily\color{DarkText}}
-  {\contentslabel{2.4em}}
-  {\hspace*{-2.4em}}
+  {\contentslabel{2.2em}}
+  {\hspace*{-2.2em}}
   {\titlerule*[0.6pc]{\color{SubtleGray!40}.}\contentspage}
+
+\titlecontents{subsubsection}[4.2em]
+  {\small\sffamily\color{DarkText!70}}
+  {\contentslabel{2.6em}}
+  {\hspace*{-2.6em}}
+  {\titlerule*[0.6pc]{\color{SubtleGray!30}.}\contentspage}
 
 % ============================================================
 % Custom Commands
@@ -376,20 +381,15 @@
 
 \newcommand{\papertitle}[1]{%
   \renewcommand{\shorttitle}{#1}%
-  \begin{tikzpicture}
-    \node[inner sep=0pt] (tl) {%
-      \begin{minipage}{\textwidth}
-        \centering
-        {\color{AccentTeal}\rule{0.35\textwidth}{1.8pt}}\\[0.8em]
-        {\footnotesize\sffamily\bfseries\color{AccentTeal}
-         \hspace{0.15em}P\hspace{0.15em}A\hspace{0.15em}P\hspace{0.15em}E\hspace{0.15em}R\hspace{1.5em}%
-         A\hspace{0.15em}N\hspace{0.15em}A\hspace{0.15em}L\hspace{0.15em}Y\hspace{0.15em}S\hspace{0.15em}I\hspace{0.15em}S}\\[0.3em]
-        {\small\sffamily\color{SubtleGray}论文深度分析}\\[1.0em]
-        {\LARGE\bfseries\sffamily\color{PrimaryBlue} #1}\\[0.6em]
-        {\color{AccentTeal!60}\rule{0.18\textwidth}{0.6pt}}
-      \end{minipage}%
-    };
-  \end{tikzpicture}\par
+  \begin{center}
+    {\color{AccentTeal}\rule{0.35\textwidth}{1.6pt}}\\[0.7em]
+    {\footnotesize\sffamily\bfseries\color{AccentTeal}%
+     \hspace{0.15em}P\hspace{0.15em}A\hspace{0.15em}P\hspace{0.15em}E\hspace{0.15em}R\hspace{1.5em}%
+     A\hspace{0.15em}N\hspace{0.15em}A\hspace{0.15em}L\hspace{0.15em}Y\hspace{0.15em}S\hspace{0.15em}I\hspace{0.15em}S}\\[0.25em]
+    {\small\sffamily\color{SubtleGray}论文深度分析}\\[0.9em]
+    {\LARGE\bfseries\sffamily\color{PrimaryBlue} #1}\\[0.5em]
+    {\color{AccentTeal!60}\rule{0.18\textwidth}{0.5pt}}
+  \end{center}%
 }
 
 \newcommand{\paperauthors}[1]{%
