@@ -40,18 +40,36 @@
 % CJK spacing tuning
 \xeCJKsetup{CJKmath=true, PlainEquation=true}
 
+% Icon font fallback for geometric Unicode glyphs (▼ ◈ ✦ ▸ etc.)
+% that the Latin sans font lacks. Noto Sans Symbols2 covers geometric shapes;
+% DejaVu Sans is a broadly-available fallback.
+\IfFontExistsTF{Noto Sans Symbols2}{%
+  \newfontfamily{\iconfont}{Noto Sans Symbols2}%
+}{%
+  \IfFontExistsTF{DejaVu Sans}{%
+    \newfontfamily{\iconfont}{DejaVu Sans}%
+  }{%
+    \newfontfamily{\iconfont}{Noto Sans CJK SC}%
+  }%
+}
+\newcommand{\bxi}[1]{{\iconfont #1}}
+
 % ============================================================
 % Page Layout
 % ============================================================
 \usepackage[
   a4paper,
-  top=2.2cm, bottom=2.2cm,
+  top=2.4cm, bottom=2.4cm,
   left=2.5cm, right=2.5cm,
-  headheight=25pt
+  headheight=28pt,
+  headsep=14pt,
+  footskip=32pt
 ]{geometry}
 
 \usepackage{setspace}
-\setstretch{1.2}
+\setstretch{1.22}
+
+\usepackage{lastpage}
 
 % ============================================================
 % Color Palette
@@ -68,27 +86,45 @@
 \definecolor{StrengthGreen}{HTML}{27AE60}
 \definecolor{MathBlueBg}{HTML}{EBF5FB}
 \definecolor{KeyBg}{HTML}{E8F8F5}
+\definecolor{QuoteBg}{HTML}{FDF6E3}
+\definecolor{MethodBg}{HTML}{EEF3F9}
+\definecolor{MethodFrame}{HTML}{2E86C1}
 
 % ============================================================
-% Section Styling
+% TikZ (loaded via tcolorbox) — used for badges
+% ============================================================
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{skins, breakable}
+
+% ============================================================
+% Section Styling (colored number badge)
 % ============================================================
 \usepackage{titlesec}
 
-\titleformat{\section}
+\newcommand{\sectionbadge}[1]{%
+  \tikz[baseline=(b.base)]{%
+    \node[fill=PrimaryBlue, text=white, rounded corners=3pt,
+          font=\bfseries\sffamily,
+          inner xsep=6pt, inner ysep=2.5pt] (b) {#1};%
+  }%
+}
+
+\titleformat{\section}[block]
   {\Large\bfseries\sffamily\color{PrimaryBlue}}
-  {\thesection}{0.8em}{}
-  [\vspace{-0.3ex}{\color{AccentTeal}\rule{\textwidth}{0.5pt}}]
+  {\sectionbadge{\thesection}}{0.7em}{}
+  [\vspace{-0.2ex}{\color{AccentTeal!70}\rule{\textwidth}{0.6pt}}%
+   \vspace{-0.2ex}{\color{AccentTeal!25}\rule{\textwidth}{0.3pt}}]
 
 \titleformat{\subsection}
-  {\large\sffamily\color{PrimaryBlue!80!black}}
+  {\large\bfseries\sffamily\color{PrimaryBlue!85!black}}
   {\thesubsection}{0.6em}{}
 
 \titleformat{\subsubsection}
-  {\normalsize\sffamily\color{PrimaryBlue!60!black}}
+  {\normalsize\bfseries\sffamily\color{PrimaryBlue!65!black}}
   {\thesubsubsection}{0.5em}{}
 
-\titlespacing*{\section}{0pt}{2.5ex plus 1ex minus .2ex}{1.5ex plus .2ex}
-\titlespacing*{\subsection}{0pt}{1.8ex plus 0.8ex minus .2ex}{0.8ex plus .2ex}
+\titlespacing*{\section}{0pt}{2.8ex plus 1ex minus .2ex}{1.6ex plus .2ex}
+\titlespacing*{\subsection}{0pt}{1.9ex plus 0.8ex minus .2ex}{0.8ex plus .2ex}
 \titlespacing*{\subsubsection}{0pt}{1.2ex plus 0.5ex minus .1ex}{0.5ex plus .1ex}
 
 % ============================================================
@@ -98,36 +134,47 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\small\sffamily\color{SubtleGray} \shorttitle}
-\fancyhead[R]{}
-\fancyfoot[C]{\small\sffamily\color{SubtleGray} --- \thepage{} ---}
+\fancyhead[L]{\small\sffamily\color{SubtleGray}\shorttitle}
+\fancyhead[R]{\small\sffamily\color{SubtleGray}论文深度分析}
+\fancyfoot[C]{\small\sffamily\color{SubtleGray}
+  \textbf{\thepage} \,/\, \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.4pt}
-\renewcommand{\headrule}{\hbox to\headwidth{\color{AccentTeal!50}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{AccentTeal!55}\leaders\hrule height \headrulewidth\hfill}}
 \renewcommand{\footrulewidth}{0pt}
 
 \fancypagestyle{plain}{
   \fancyhf{}
-  \fancyfoot[C]{\small\sffamily\color{SubtleGray} --- \thepage{} ---}
+  \fancyfoot[C]{\small\sffamily\color{SubtleGray}
+    \textbf{\thepage} \,/\, \pageref{LastPage}}
   \renewcommand{\headrulewidth}{0pt}
 }
 
 % ============================================================
 % Highlight Boxes (tcolorbox)
 % ============================================================
-\usepackage[most]{tcolorbox}
 
-% Key insight / TL;DR box
+% Key insight / TL;DR box (floating pill title)
 \newtcolorbox{keyinsight}[1][核心要点]{
   enhanced,
   colback=KeyBg,
   colframe=AccentTeal,
   boxrule=0.6pt,
-  left=10pt, right=10pt, top=8pt, bottom=8pt,
-  arc=4pt,
-  fonttitle=\bfseries\sffamily\small\color{AccentTeal},
-  title={#1},
-  shadow={1pt}{-1pt}{0pt}{AccentTeal!15},
-  breakable
+  left=12pt, right=12pt, top=9pt, bottom=9pt,
+  arc=5pt,
+  fonttitle=\bfseries\sffamily\small\color{white},
+  coltitle=white,
+  colbacktitle=AccentTeal,
+  attach boxed title to top left={xshift=10pt, yshift=-8pt},
+  boxed title style={
+    colback=AccentTeal,
+    boxrule=0pt,
+    arc=3pt,
+    left=6pt, right=6pt, top=2pt, bottom=2pt,
+  },
+  title={\rule[-1pt]{0pt}{9pt}\,\bxi{◆}\,\,#1\,},
+  drop shadow=AccentTeal!20,
+  breakable,
+  before skip=10pt, after skip=10pt
 }
 
 % Strength box
@@ -136,11 +183,12 @@
   colback=StrengthGreen!5,
   colframe=StrengthGreen!60!black,
   boxrule=0.4pt,
-  left=8pt, right=8pt, top=6pt, bottom=6pt,
-  arc=3pt,
+  left=10pt, right=10pt, top=7pt, bottom=7pt,
+  arc=4pt,
   coltitle=white,
   fonttitle=\bfseries\sffamily\small,
-  title={#1},
+  title={\,\bxi{▲}\,\,#1},
+  drop shadow=StrengthGreen!15,
   breakable
 }
 
@@ -150,11 +198,12 @@
   colback=CriticalRed!4,
   colframe=CriticalRed!50!black,
   boxrule=0.4pt,
-  left=8pt, right=8pt, top=6pt, bottom=6pt,
-  arc=3pt,
+  left=10pt, right=10pt, top=7pt, bottom=7pt,
+  arc=4pt,
   coltitle=white,
   fonttitle=\bfseries\sffamily\small,
-  title={#1},
+  title={\,\bxi{▼}\,\,#1},
+  drop shadow=CriticalRed!15,
   breakable
 }
 
@@ -162,26 +211,74 @@
 \newtcolorbox{mathbox}[1][]{
   enhanced,
   colback=MathBlueBg,
-  colframe=PrimaryBlue!40,
+  colframe=PrimaryBlue!45,
   boxrule=0.4pt,
-  left=10pt, right=10pt, top=8pt, bottom=8pt,
-  arc=3pt,
+  left=12pt, right=12pt, top=9pt, bottom=9pt,
+  arc=4pt,
   breakable,
-  title={#1},
-  fonttitle=\bfseries\sffamily\small\color{PrimaryBlue}
+  title={\,$\Sigma$\,\,#1},
+  fonttitle=\bfseries\sffamily\small\color{PrimaryBlue},
+  drop shadow=PrimaryBlue!10,
 }
 
 % Info box (for metadata, reading suggestions, etc.)
 \newtcolorbox{infobox}[1][]{
   enhanced,
   colback=LightBg,
-  colframe=SubtleGray!60,
+  colframe=SubtleGray!55,
   boxrule=0.3pt,
-  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  left=10pt, right=10pt, top=7pt, bottom=7pt,
   arc=3pt,
   breakable,
+  title={\,\bxi{▸}\,\,#1},
+  fonttitle=\bfseries\sffamily\small\color{DarkText},
+}
+
+% Method / architecture box
+\newtcolorbox{methodbox}[1][方法概述]{
+  enhanced,
+  colback=MethodBg,
+  colframe=MethodFrame,
+  boxrule=0.5pt,
+  left=10pt, right=10pt, top=7pt, bottom=7pt,
+  arc=4pt,
+  coltitle=white,
+  colbacktitle=MethodFrame,
+  fonttitle=\bfseries\sffamily\small,
+  title={\,\bxi{◈}\,\,#1},
+  drop shadow=MethodFrame!15,
+  breakable
+}
+
+% Takeaway / conclusion box (distinct from keyinsight; use at section ends)
+\newtcolorbox{takeaway}[1][要点小结]{
+  enhanced,
+  colback=WarmOrange!6,
+  colframe=WarmOrange!70!black,
+  boxrule=0.5pt,
+  left=10pt, right=10pt, top=7pt, bottom=7pt,
+  arc=4pt,
+  coltitle=white,
+  colbacktitle=WarmOrange!80!black,
+  fonttitle=\bfseries\sffamily\small,
+  title={\,\bxi{✦}\,\,#1},
+  breakable
+}
+
+% Quote / citation callout
+\newtcolorbox{quotebox}[1][]{
+  enhanced,
+  colback=QuoteBg,
+  colframe=WarmOrange!40,
+  boxrule=0pt,
+  leftrule=3pt,
+  left=12pt, right=10pt, top=7pt, bottom=7pt,
+  arc=0pt,
+  fontupper=\itshape,
   title={#1},
-  fonttitle=\bfseries\sffamily\small\color{DarkText}
+  coltitle=SubtleGray,
+  fonttitle=\bfseries\sffamily\small,
+  breakable
 }
 
 % ============================================================
@@ -195,6 +292,8 @@
 \usepackage{longtable}
 \usepackage{multirow}
 \usepackage{makecell}
+\usepackage{array}
+\renewcommand{\arraystretch}{1.2}
 
 % ============================================================
 % Code Listings
@@ -235,9 +334,10 @@
 % Lists
 % ============================================================
 \usepackage{enumitem}
-\setlist{nosep, leftmargin=1.5em}
-\setlist[itemize,1]{label=\color{AccentTeal}\textbullet}
+\setlist{nosep, leftmargin=1.6em, itemsep=2pt, parsep=1pt}
+\setlist[itemize,1]{label=\color{AccentTeal}\small$\blacktriangleright$}
 \setlist[itemize,2]{label=\color{PrimaryBlue!60}\textendash}
+\setlist[enumerate,1]{label=\color{PrimaryBlue}\bfseries\arabic*.}
 
 % ============================================================
 % Graphics
@@ -246,19 +346,52 @@
 \usepackage{float}
 \usepackage{subcaption}
 
+% Caption styling
+\usepackage[font=small,labelfont={bf,color=PrimaryBlue},
+            textfont={color=DarkText},labelsep=period]{caption}
+
+% ============================================================
+% Table of Contents Styling
+% ============================================================
+\usepackage{titletoc}
+\renewcommand{\contentsname}{\color{PrimaryBlue}\sffamily 目\quad 录}
+
+\titlecontents{section}[0em]
+  {\addvspace{4pt}\sffamily\bfseries\color{PrimaryBlue}}
+  {\contentslabel{1.6em}}
+  {\hspace*{-1.6em}}
+  {\titlerule*[0.6pc]{\color{SubtleGray!50}.}\contentspage}
+
+\titlecontents{subsection}[2.2em]
+  {\small\sffamily\color{DarkText}}
+  {\contentslabel{2.4em}}
+  {\hspace*{-2.4em}}
+  {\titlerule*[0.6pc]{\color{SubtleGray!40}.}\contentspage}
+
 % ============================================================
 % Custom Commands
 % ============================================================
 % Title block commands
 \newcommand{\shorttitle}{}
+
 \newcommand{\papertitle}[1]{%
   \renewcommand{\shorttitle}{#1}%
-  \begin{center}
-    \vspace*{0.3cm}
-    {\small\sffamily\color{SubtleGray} 论文深度分析}\\[0.6em]
-    {\LARGE\bfseries\sffamily\color{PrimaryBlue} #1}
-  \end{center}
+  \begin{tikzpicture}
+    \node[inner sep=0pt] (tl) {%
+      \begin{minipage}{\textwidth}
+        \centering
+        {\color{AccentTeal}\rule{0.35\textwidth}{1.8pt}}\\[0.8em]
+        {\footnotesize\sffamily\bfseries\color{AccentTeal}
+         \hspace{0.15em}P\hspace{0.15em}A\hspace{0.15em}P\hspace{0.15em}E\hspace{0.15em}R\hspace{1.5em}%
+         A\hspace{0.15em}N\hspace{0.15em}A\hspace{0.15em}L\hspace{0.15em}Y\hspace{0.15em}S\hspace{0.15em}I\hspace{0.15em}S}\\[0.3em]
+        {\small\sffamily\color{SubtleGray}论文深度分析}\\[1.0em]
+        {\LARGE\bfseries\sffamily\color{PrimaryBlue} #1}\\[0.6em]
+        {\color{AccentTeal!60}\rule{0.18\textwidth}{0.6pt}}
+      \end{minipage}%
+    };
+  \end{tikzpicture}\par
 }
+
 \newcommand{\paperauthors}[1]{%
   \begin{center}{\normalsize\color{DarkText} #1}\end{center}
 }
@@ -266,7 +399,7 @@
   \begin{center}{\small\color{SubtleGray}\itshape #1}\end{center}
 }
 \newcommand{\paperdate}[1]{%
-  \begin{center}{\small\color{SubtleGray} 分析日期：#1}\end{center}
+  \begin{center}{\small\sffamily\color{SubtleGray} 分析日期：#1}\end{center}
 }
 
 % Colored marks for strengths/weaknesses
@@ -279,6 +412,28 @@
 \newcommand{\ratinghalf}{\textcolor{WarmOrange!40}{$\bigstar$}}
 \newcommand{\ratingempty}{\textcolor{SubtleGray!30}{$\bigstar$}}
 
+% Inline pill/tag for keywords, categories, tags
+% Usage: \ptag{Systems} \ptag[PrimaryBlue]{Algorithm}
+\newcommand{\ptag}[2][AccentTeal]{%
+  \tikz[baseline=(t.base)]{%
+    \node[fill=#1!12, draw=#1!60, rounded corners=2pt,
+          inner xsep=4pt, inner ysep=1pt,
+          font=\footnotesize\sffamily,
+          text=#1!60!black] (t) {#2};%
+  }%
+}
+
+% Key metric badge
+% Usage: \metric{92.3\%}{accuracy}
+\newcommand{\metric}[2]{%
+  \tikz[baseline=(m.base)]{%
+    \node[fill=PrimaryBlue, rounded corners=3pt,
+          inner xsep=6pt, inner ysep=2pt,
+          font=\footnotesize\bfseries\sffamily,
+          text=white] (m) {#1\hspace{0.4em}\textcolor{white!80}{\scriptsize #2}};%
+  }%
+}
+
 % ============================================================
 % Document Begin
 % ============================================================
@@ -286,12 +441,13 @@
 
 % --- Title Block ---
 % Replace placeholders with actual paper info
+\vspace*{0.2cm}
 \papertitle{%PAPER_TITLE%}
 \paperauthors{%PAPER_AUTHORS%}
 \papervenue{%PAPER_VENUE% \quad | \quad %PAPER_YEAR%}
 \paperdate{\today}
 
-\vspace{0.8em}
+\vspace{1.0em}
 
 % --- One-line summary ---
 \begin{keyinsight}[一句话总结]
