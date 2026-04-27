@@ -55,6 +55,30 @@ Uncomment the section templates and fill in the analysis content between `\secti
 
   **When to use which**: If Markdown has `**Bold title：** body text` as a standalone labeled paragraph (e.g., challenges, subsystem descriptions), convert to `\paragraph{}`. If it's inline emphasis within a sentence, keep `\textbf{}`.
 
+- Never place `\paragraph{...}` immediately before `\begin{keyinsight}` / `\begin{strengthbox}` / `\begin{methodbox}` etc. with NO body text in between — `\paragraph` is a runin heading whose space-after is meant to be absorbed by inline body text on the same paragraph. Without that body text, the heading's vertical glue collapses and the box's `before skip` doesn't fully apply, leaving the box visually nested against the heading.
+
+  ```latex
+  % BAD — runin heading collapses against the box:
+  \paragraph{训练稳定性双招。}
+  \begin{keyinsight}[Anticipatory Routing]
+  ...
+  \end{keyinsight}
+
+  % GOOD option 1 — add inline body text after the heading (most natural):
+  \paragraph{训练稳定性双招。} 论文用两招缓解 trillion-scale MoE 的 loss spike：
+  \begin{keyinsight}[Anticipatory Routing]
+  ...
+
+  % GOOD option 2 — promote to \subsubsection if it warrants its own section:
+  \subsubsection{训练稳定性双招}
+  \begin{keyinsight}[Anticipatory Routing]
+  ...
+
+  % GOOD option 3 — force a real paragraph break (last resort):
+  \paragraph{训练稳定性双招。}\mbox{}\par
+  \begin{keyinsight}[Anticipatory Routing]
+  ```
+
 ## Code Examples
 
 ### Equation with Chinese explanation
