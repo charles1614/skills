@@ -126,6 +126,18 @@
 \titlespacing*{\subsection}{0pt}{1.9ex plus 0.8ex minus .2ex}{0.8ex plus .2ex}
 \titlespacing*{\subsubsection}{0pt}{1.2ex plus 0.5ex minus .1ex}{0.5ex plus .1ex}
 
+% Robust \paragraph: keeps runin behavior but enforces explicit positive
+% post-spacing via titlesec, so the glue doesn't collapse when followed
+% directly by an environment (\begin{keyinsight}, \begin{infobox}, etc.).
+% Default LaTeX \paragraph uses negative space-after to signal "absorb into
+% inline body text" — collapses to nothing when no body follows.
+\titleformat{\paragraph}[runin]
+  {\normalfont\normalsize\bfseries}
+  {}{0pt}{}
+\titlespacing*{\paragraph}{0pt}%
+  {1.4ex plus 0.4ex minus 0.1ex}%
+  {0.6em plus 0.1em}
+
 % ============================================================
 % Header & Footer
 % ============================================================
@@ -217,12 +229,15 @@
 }
 
 % Info box (for metadata, reading suggestions, etc.)
+% Slightly less horizontal padding (8pt vs 10pt on other boxes) so legacy
+% fixed-cm tables like p{3.2cm}p{13cm} (=16.2cm) fit within the box's
+% interior (~15.5cm at 8pt padding).
 \newtcolorbox{infobox}[1][]{
   enhanced,
   colback=LightBg,
   colframe=SubtleGray!55,
   boxrule=0.3pt,
-  left=10pt, right=10pt, top=7pt, bottom=7pt,
+  left=8pt, right=8pt, top=7pt, bottom=7pt,
   arc=3pt,
   breakable,
   title={\,\bxi{▸}\,\,#1},
@@ -294,6 +309,15 @@
 \usepackage{array}
 \renewcommand{\arraystretch}{1.2}
 
+% Relax line-breaking inside tables only — prevents long unbreakable tokens
+% in cells (URLs, namespaced identifiers) from forcing CJK-justified text
+% in the same cell to stretch. \sloppy in body paragraphs is undesirable
+% but inside table cells the breakage tradeoff is favorable.
+\usepackage{etoolbox}
+\AtBeginEnvironment{tabular}{\sloppy}
+\AtBeginEnvironment{tabularx}{\sloppy}
+\AtBeginEnvironment{longtable}{\sloppy}
+
 % ============================================================
 % Code Listings
 % ============================================================
@@ -328,6 +352,15 @@
   bookmarksnumbered=true,
   bookmarksopen=true
 }
+
+% URL/path breaking — applies to \url{} and \path{} (loaded by hyperref via
+% the url package). Default \UrlBreaks doesn't include hyphen, so paths
+% like deepseek-ai/DeepSeek-V4-Flash can't break and force CJK-justified
+% lines to stretch. Adding hyphen + a few more chars here makes long
+% monospace identifiers break naturally.
+\Urlmuskip=0mu plus 1mu\relax
+\def\UrlBreaks{\do\.\do\@\do\\\do\/\do\!\do\_\do\?\do\;\do\>\do\]\do\)\do\,\do\'\do\-\do\=\do\+\do\#\do\&}
+\urlstyle{tt}
 
 % ============================================================
 % Lists
