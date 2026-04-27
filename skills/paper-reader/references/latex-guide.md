@@ -57,6 +57,26 @@ Uncomment the section templates and fill in the analysis content between `\secti
 
 - For long URLs, GitHub paths, namespaced identifiers, or any monospace tokens that contain `/`, `@`, `_`, `-`, or `.`, prefer `\path{...}` over `\texttt{...}`. The template configures `\path` (via the `url` package) to break naturally at those characters, preventing CJK-justified lines from stretching when a long path appears inline.
 
+- For 2-column key/value tables inside `infobox` (e.g. paper-info, evaluation matrices, configuration summaries), use `\begin{infotable} ... \end{infotable}` instead of `\begin{tabular}{p{Ncm}p{Mcm}}`. `infotable` is a template-provided environment that auto-sizes via `tabularx{\linewidth}{p{2.8cm}X}` to fit the box's interior — fixed-cm column specs frequently overflow because `infobox` has internal padding.
+
+  ```latex
+  % BAD — fixed columns can exceed the box's interior width:
+  \begin{infobox}[论文信息]
+  \begin{tabular}{@{}p{3.2cm}p{13cm}@{}}    % 16.2cm > ~15.4cm interior
+  \textbf{标题} & ... \\
+  \end{tabular}
+  \end{infobox}
+
+  % GOOD — auto-sizing fits the box exactly:
+  \begin{infobox}[论文信息]
+  \begin{infotable}
+  \textbf{标题} & ... \\
+  \end{infotable}
+  \end{infobox}
+  ```
+
+  For 3+ column tables, use `tabularx{\linewidth}{l l X}` directly (one `X` column to absorb remaining width).
+
   ```latex
   % BAD — long token can't break, forces preceding Chinese text to stretch:
   通过 HuggingFace \texttt{deepseek-ai/DeepSeek-V4-Flash} 仓库发布

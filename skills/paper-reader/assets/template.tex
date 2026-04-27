@@ -278,6 +278,18 @@
   before skip=12pt, after skip=12pt
 }
 
+% Auto-sized 2-column key/value table for use inside \begin{infobox}.
+% First column 2.8cm for labels, second X-fills the remaining interior
+% width. Use this instead of fixed-cm \begin{tabular}{p{Ncm}p{Mcm}} when
+% N+M would exceed ~15cm or when the second column may contain long
+% content. Sizing automatically adapts to the box's \linewidth.
+% Uses \NewEnviron because tabularx body-scanning breaks under plain
+% \newenvironment.
+\usepackage{environ}
+\NewEnviron{infotable}{%
+  \begin{tabularx}{\linewidth}{@{}p{2.8cm}X@{}}\BODY\end{tabularx}%
+}
+
 % Quote / citation callout
 \newtcolorbox{quotebox}[1][]{
   enhanced,
