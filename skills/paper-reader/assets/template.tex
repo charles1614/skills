@@ -152,28 +152,21 @@
 % Highlight Boxes (tcolorbox)
 % ============================================================
 
-% Key insight / TL;DR box (floating pill title)
+% Key insight / TL;DR box (full-width title bar — unified with other primary callouts)
 \newtcolorbox{keyinsight}[1][核心要点]{
   enhanced,
   colback=KeyBg,
   colframe=AccentTeal,
-  boxrule=0.6pt,
-  left=12pt, right=12pt, top=9pt, bottom=9pt,
-  arc=5pt,
-  fonttitle=\bfseries\sffamily\small\color{white},
+  boxrule=0.5pt,
+  left=10pt, right=10pt, top=7pt, bottom=7pt,
+  arc=4pt,
   coltitle=white,
   colbacktitle=AccentTeal,
-  attach boxed title to top left={xshift=10pt, yshift=0pt},
-  boxed title style={
-    colback=AccentTeal,
-    boxrule=0pt,
-    arc=3pt,
-    left=6pt, right=6pt, top=2pt, bottom=2pt,
-  },
-  title={\rule[-1pt]{0pt}{9pt}\,\bxi{◆}\,\,#1\,},
-  drop shadow=AccentTeal!20,
+  fonttitle=\bfseries\sffamily\small,
+  title={\,\bxi{◆}\,\,#1},
+  drop shadow=AccentTeal!15,
   breakable,
-  before skip=18pt, after skip=10pt
+  before skip=10pt, after skip=10pt
 }
 
 % Strength box
