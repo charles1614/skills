@@ -372,6 +372,7 @@ each one deliberately and fix or accept it.
    | Error Type | Fix |
    |------------|-----|
    | `mermaid_syntax` | Fix diagram syntax at reported line |
+   | `mermaid_hardcoded_style` | Delete the `classDef`/`style`/`linkStyle` color directive — the app themes diagrams itself |
    | `missing_section` | Add required section content (Introduction, Summary, metadata) |
    | `metadata_placement` | Single H1 first; `**Part of**:` byline directly under it |
    | `word_count` | Too short → merge the section (don't pad); too long → split |

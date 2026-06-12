@@ -98,6 +98,18 @@ def validate_mermaid_block(content: str, start_line: int) -> List[Dict[str, Any]
         if not stripped or stripped.startswith('%%'):
             continue
 
+        # Hardcoded colors override the DeepWiki app's unified Mermaid theme
+        # (lib/markdown/mermaidTheme.ts in the app) and clash with it.
+        # stroke-width/-dasharray don't match: the colon must follow directly.
+        if re.match(r'(?i)(classDef|style|linkStyle)\b', stripped) and \
+                re.search(r'(?i)\b(?:fill|stroke|color)\s*:', stripped):
+            errors.append({
+                'line': line_num,
+                'type': 'mermaid_hardcoded_style',
+                'message': "Hardcoded diagram color (fill/stroke/color directive) — the DeepWiki app applies its own Mermaid theme; leave diagrams unstyled"
+            })
+            continue
+
         # Skip lines starting with valid keywords
         first_word = stripped.split()[0] if stripped.split() else ''
         if first_word.lower() in valid_keywords or first_word.rstrip(':').lower() in valid_keywords:
