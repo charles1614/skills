@@ -48,7 +48,7 @@ Follow these 8 tasks in order:
 4. **Index Generation** - Generate index.md FIRST
 5. **Detail File Generation** - Generate each section as separate file
 6. **Validation** - Verify structure and syntax (loop until clean)
-7. **Source-Reference Verification** - Ground every file/line reference and code snippet against the codebase (loop until clean)
+7. **Source-Reference Verification** - Ground every file/line reference and code snippet against the codebase, then audit coverage (loop until clean)
 8. **Publish** - Upload the export to the DeepWiki instance and report a pipeline summary
 
 ## Task 1: Codebase Scanning and Feature Discovery
@@ -139,6 +139,11 @@ Based on Task 1 findings, dynamically determine the optimal structure:
 - Each project will have a DIFFERENT structure based on actual features
 - Create section hierarchy that matches codebase organization
 - Plan file structure for `.deepwiki/<project-name>/`
+- **Produce a coverage map**: every top-level module/directory (and every
+  in-scope nested repo) from Task 1 maps to a planned section, or is
+  explicitly marked out-of-scope with a reason. This map is the input to
+  Task 7 Phase D, and the out-of-scope list goes verbatim into the
+  index.md scope statement — nothing is silently dropped.
 - If Task 1 detected a `.paper/` folder: plan a `N-paper-vs-implementation.md`
   section (numbered near the end, before the ADR section). With multiple
   papers, make it an index with numbered children (`N-1-paper-<short-slug>.md`
@@ -151,23 +156,30 @@ See [`references/output-examples.md`](references/output-examples.md) for structu
 
 Create sections that match discovered features. Read [`references/section-templates.md`](references/section-templates.md) for section types and content guidelines.
 
-**Content balance per section:**
-- Text explanations: 50-60% (mix of paragraphs and bullet points)
-- Mermaid diagrams: 30-40%
-- Code snippets: 10-20% (5-10 snippets per major section, 5-15 lines each)
+**Content balance per section** (counts, not percentages — prose carries
+the explanation):
+- Text (paragraphs + bullets): the majority of every section's words
+- Mermaid diagrams: 1-3 per file, ≤~15 nodes each
+- Code snippets: 4-10 per major section, 5-15 lines each, quoted **verbatim**
+  with a `From: path:N-M` attribution line (verified mechanically in Task 7)
 
 **Content length requirements:**
 - Each markdown file must contain at least 1500 words of substantive content
+  (exempt: ADR children and index.md — the validator skips their word count)
 - Aim for comprehensive coverage: explain concepts thoroughly, include examples, document trade-offs
 - Maximum 6000 words per file to maintain focus
 - Section lengths are flexible - some sections naturally need more content than others
+- **Merge, don't pad**: if a planned section cannot reach the minimum
+  without filler, it is too thin to stand alone — fold it into its parent
+  or a sibling and update the structure plan. Padding to satisfy the word
+  count is a worse failure than a missing section.
 
 **For every section, follow this structure:**
 1. **Introduction** (1-2 paragraphs): What this is and why it exists
 2. **Architecture/Overview** (Mermaid diagram): Structure, flow, or relationships
 3. **Key Concepts** (2-4 paragraphs): How it works, design decisions, trade-offs
 4. **Implementation Details** (table/text): Use tables for structured info
-5. **Code References** (5-10 snippets): Critical patterns and implementations
+5. **Code References** (4-10 snippets): Critical patterns and implementations
 6. **Source References**: Point to source files with line numbers
 7. **Summary** (1-2 paragraphs): Key takeaways and connections to other sections
 
@@ -207,10 +219,12 @@ Last indexed: Commit: [commit hash from `git rev-parse --short HEAD`]
 This architecture documentation was generated through comprehensive analysis of the [Project Name] codebase, covering:
 
 - **[N] source files analyzed** ([X] primary language files, [Y] configuration files)
-- **[N] major subsystems documented**
-- **[N]+ source files referenced** with specific line numbers
-- **All public API functions covered**
-- **Complete [feature] architecture explained**
+- **[N] major subsystems documented** ([M] sections, [K] ADRs)
+- **[N] source references** with specific line numbers, verified against commit [hash]
+
+State only counts you actually measured during this run — never blanket
+claims like "all public APIs covered" that no gate verifies. If anything
+is out of scope (an excluded nested repo, a vendored module), say so here.
 
 ### Key Components Covered
 
@@ -314,6 +328,13 @@ text). The H1 line itself doubles as the back-navigation anchor:
 **Source commit**: [hash]
 ```
 
+**True up index.md (final step).** index.md was written FIRST (Task 4), so
+once all section files exist, re-open it and reconcile: the section list
+matches the files actually shipped (sections merged or split during
+generation), every count in "About This Documentation" reflects measured
+reality, and the scope statement still names exactly what was covered and
+excluded.
+
 ## Task 6: Documentation Validation (Loop Until Valid)
 
 **MANDATORY**: Run validation script and fix all errors before completion.
@@ -327,9 +348,18 @@ python scripts/validate_docs.py .deepwiki/<project-name>/
 The script validates:
 - **Mermaid syntax**: Node IDs, brackets, arrows, subgraphs
 - **Section structure**: Navigation links, metadata, Introduction/Summary sections
-- **Word count**: Each markdown file meets min (1500) and max (6000) word limits
-- **Internal links**: All `[text](file.md)` references resolve
+- **Metadata placement**: exactly one H1, byline (`**Part of**:` …) directly under it
+- **Word count**: Each markdown file meets min (1500) and max (6000) word limits (ADR children and index.md exempt)
+- **Internal links**: All `[text](file.md)` references resolve, target bare flat filenames, and carry no cross-file `#anchor`; same-page anchors match a real heading ID
+- **Images**: every reference resolves to a shipped image; basenames unique (extension-blind); upload budget (5 MB/image, 10 MB and 50 files total)
+- **File naming**: un-padded numeric prefixes with lowercase kebab-case slugs
+- **Unsupported markdown**: task lists error; footnotes/math warn (the app renders them literally)
+- **index.md frontmatter**: title/slug/description present, slug URL-safe, values YAML-parseable
 - **Table format**: Proper markdown table syntax
+
+The JSON also carries a `warnings` list (unreferenced shipped images,
+unnumbered filenames, footnote/math hits). Warnings don't block — review
+each one deliberately and fix or accept it.
 
 ### Validation Loop
 
@@ -343,8 +373,15 @@ The script validates:
    |------------|-----|
    | `mermaid_syntax` | Fix diagram syntax at reported line |
    | `missing_section` | Add required section content (Introduction, Summary, metadata) |
-   | `word_count` | Adjust file content length to meet min/max word limits |
+   | `metadata_placement` | Single H1 first; `**Part of**:` byline directly under it |
+   | `word_count` | Too short → merge the section (don't pad); too long → split |
    | `broken_link` | Fix file path or create missing file |
+   | `broken_anchor` | Same-page: fix the `#id`; cross-file: link the file only |
+   | `broken_image` / `image_assets` | Ship the image / fix basename collisions and size budget |
+   | `flat_structure` | Move .md to export root; link bare filenames |
+   | `filename_convention` | Un-padded numeric prefix + lowercase kebab slug |
+   | `unsupported_markdown` | Plain bullets instead of `- [ ]`; no footnotes/LaTeX |
+   | `frontmatter` | Quote YAML values with colons; URL-safe slug |
    | `table_format` | Fix table markdown syntax |
    | `adr_format` | Fix ADR file structure (naming, required sections, status) |
    | `cross_reference` | Link orphaned section files from index.md |
@@ -361,7 +398,7 @@ The script validates:
   "total_errors": 2,
   "errors": [
     {
-      "file": "02-architecture.md",
+      "file": "2-architecture.md",
       "line": 45,
       "type": "mermaid_syntax",
       "message": "Invalid node ID: spaces not allowed in 'Node One'"
@@ -398,15 +435,23 @@ reference outside code fences and errors when the file does not exist in the
 repo or the line range runs past the end of the file. Same JSON shape as
 Task 6 — fix every error and re-run until `"status": "success"`.
 
-### Phase B: Snippet grounding (model pass)
+### Phase B: Snippet grounding (deterministic + model triage)
 
-For each code snippet attributed to a source file, grep one distinctive
-line of the snippet in that file (e.g. `grep -nF "<distinctive line>"
-<repo>/<path>`) and confirm it matches at the claimed location. For every
-mismatch:
-- Re-read the actual source and correct the snippet/line numbers, or
-- Remove the reference if the claim cannot be grounded — never leave an
-  unverified `file:line` in shipped documentation.
+The same script also grounds every **attributed snippet**: a fenced code
+block whose first line is `# From: path/file.py:N-M` (comment token per
+language; multi-range `# From: README.md:46-49, :62-63, :79` supported) is
+matched line-by-line against the cited range of the real file.
+
+Triage its findings:
+- `snippet_attr_ref` / `snippet_mismatch` (errors): re-read the actual
+  source (`grep -nF "<distinctive line>" <repo>/<path>` to relocate) and
+  correct the snippet or its line numbers — or remove the snippet if the
+  claim cannot be grounded. Never leave an unverified attribution in
+  shipped documentation.
+- `snippet_unattributed` (warnings): for each listed fence, either it is a
+  genuine usage example (leave it, no attribution implied) or it quotes the
+  codebase (add the `From:` attribution so it gets verified). Review every
+  warning deliberately.
 
 ### Phase C: Paper-claim grounding (only when `.paper/` exists)
 
@@ -418,6 +463,21 @@ page from the `=== PAGE N ===` markers as "(paper p. N)". Any paper claim
 that cannot be grounded in `paper_text.txt` is removed or explicitly hedged
 ("not stated in the paper text") — never left as a confident assertion.
 Do NOT cite the `_analysis.md` as evidence; it is a derived report.
+
+### Phase D: Coverage audit (model pass)
+
+Grounded is not the same as complete — Phases A–C verify what the docs
+*say*, this phase verifies nothing was silently *dropped*. Take the Task 2
+coverage map and check it against the shipped export:
+
+- Every top-level module/directory and in-scope nested repo is either
+  substantively documented in a named section (spot-check that the section
+  actually cites its files), or listed as out-of-scope in index.md with a
+  reason.
+- Anything that fails both → write the missing coverage or add the explicit
+  exclusion. Do not fix a gap by deleting it from the map.
+- Confirm index.md's "About This Documentation" counts match the shipped
+  export (files, sections, ADRs) after all Task 6/7 edits.
 
 Re-run Phase A after edits. All phases clean → proceed to Task 8.
 
@@ -461,7 +521,7 @@ Pipeline summary:
 | 2 Structure selection | OK | N sections planned |
 | 3-5 Generation | OK | N files, N diagrams, N ADRs |
 | 6 Validation | OK / RETRIED | 0 errors (RETRIED: N fixed) |
-| 7 Source-ref verification | OK / RETRIED | N refs checked, N corrected |
+| 7 Source-ref verification | OK / RETRIED | N refs + N snippets checked, N corrected; coverage audited |
 | 8 Publish | OK / FALLBACK / SKIPPED | <wiki URL, or reason + re-run hint> |
 ```
 
@@ -501,7 +561,8 @@ Pipeline summary:
 ```
 
 ### Mermaid Diagrams
-- Use `graph TB` or `graph LR` for components
+- Prefer `graph LR` for component graphs; split a diagram past ~15 nodes
+  (the app renders into a 500px-tall card)
 - Use `sequenceDiagram` for request flows
 - Node IDs: no spaces (use `NodeA`, not `Node A`)
 - Labels: use brackets `A[Label Text]`
