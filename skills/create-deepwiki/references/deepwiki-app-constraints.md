@@ -103,6 +103,10 @@ Rendered inline into a card capped at **500px height** with click-to-zoom
   letting one grow past ~15 nodes.
 - White card background in BOTH themes — don't rely on theme colors inside
   the diagram.
+- The app themes every diagram itself with one unified palette
+  (`lib/markdown/mermaidTheme.ts`). NEVER hardcode colors: inline
+  `classDef`/`style`/`linkStyle` fill/stroke/color directives override the
+  app theme and clash with it. Leave diagrams unstyled.
 - Node IDs without spaces (`NodeA[Label Text]`); cluster labels wrap at
   800px.
 

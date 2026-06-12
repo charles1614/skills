@@ -288,15 +288,6 @@ graph TB
     OrderRepo --> PostgresDB
     CacheLayer --> RedisCache
     NotifSvc --> MsgQueue
-
-    classDef gateway fill:#e1f5fe
-    classDef business fill:#f3e5f5
-    classDef data fill:#e8f5e9
-    classDef infra fill:#fff3e0
-    class Router,AuthMW,RateLimit gateway
-    class UserSvc,OrderSvc,NotifSvc business
-    class UserRepo,OrderRepo,CacheLayer data
-    class PostgresDB,RedisCache,MsgQueue infra
 ```
 
 ## Key Concepts
