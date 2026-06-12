@@ -2,15 +2,32 @@
 
 Execute ALL discovery commands before writing documentation.
 
+## Exclusions (apply to every phase)
+
+Alongside the build/vendor directories shown in each command, ALWAYS exclude
+this run's own inputs and outputs — they are not part of the scanned codebase
+and will contaminate statistics, pattern greps, and image discovery:
+
+- `.deepwiki/` and the **resolved output root** (when a host project
+  overrides it, e.g. `content/<project-name>/` — exclude that specific
+  path, NOT all of `content/`, which is legitimate source in
+  Hugo/Nuxt/Gatsby-style repos)
+- `.paper/` (reference input — its figures and text are cited, never
+  counted as repo assets; this matters most for Image Discovery below)
+
+Append them to the grep filters, e.g.
+`grep -v "node_modules\|\.git\|\.deepwiki\|\.paper"`, and to `tree -I`
+patterns.
+
 ## Phase 0: Quick Structure Overview
 
 ```bash
 echo "=== QUICK STRUCTURE OVERVIEW ==="
 # Use tree if available, fallback to find
 if command -v tree &>/dev/null; then
-    tree -L 3 -I 'node_modules|.git|vendor|target|build|dist|__pycache__|.venv|.tox'
+    tree -L 3 -I 'node_modules|.git|vendor|target|build|dist|__pycache__|.venv|.tox|.deepwiki|.paper'
 else
-    find . -maxdepth 3 -type d | grep -v 'node_modules\|\.git\|vendor\|target\|build\|dist' | head -60
+    find . -maxdepth 3 -type d | grep -v 'node_modules\|\.git\|vendor\|target\|build\|dist\|\.deepwiki\|\.paper' | head -60
 fi
 ```
 
@@ -185,15 +202,18 @@ grep -r "TODO\|FIXME\|HACK\|NOTE\|XXX\|BUG\|DEPRECATED" --include="*.py" --inclu
 
 ```bash
 echo "=== IMAGE AND VISUAL ASSETS DISCOVERY ==="
+# CRITICAL: exclude .deepwiki (prior exports' img/), the resolved output
+# root, and .paper (paper figures are candidates via Task 5's figure
+# inventory, NOT repo assets) — or this picks up the skill's own outputs.
 
 # Find all image files
-find . -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.svg" -o -iname "*.webp" \) | grep -v "node_modules\|\.git\|vendor\|target\|build\|dist" | head -50
+find . -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.svg" -o -iname "*.webp" \) | grep -v "node_modules\|\.git\|vendor\|target\|build\|dist\|\.deepwiki\|\.paper" | head -50
 
 # Find images in documentation directories
-find . -type f \( -path "*/docs/*" -o -path "*/documentation/*" -o -path "*/images/*" -o -path "*/assets/*" -o -path "*/img/*" \) | grep -E "\.(png|jpg|jpeg|gif|svg|webp)$" | head -30
+find . -type f \( -path "*/docs/*" -o -path "*/documentation/*" -o -path "*/images/*" -o -path "*/assets/*" -o -path "*/img/*" \) | grep -v "\.deepwiki\|\.paper" | grep -E "\.(png|jpg|jpeg|gif|svg|webp)$" | head -30
 
 # Find architecture diagrams and design assets
-find . -type f \( -iname "*architecture*" -o -iname "*diagram*" -o -iname "*design*" -o -iname "*flow*" -o -iname "*chart*" \) | grep -E "\.(png|jpg|jpeg|svg|webp)$" | head -20
+find . -type f \( -iname "*architecture*" -o -iname "*diagram*" -o -iname "*design*" -o -iname "*flow*" -o -iname "*chart*" \) | grep -v "\.deepwiki\|\.paper" | grep -E "\.(png|jpg|jpeg|svg|webp)$" | head -20
 ```
 
 ## Project Evolution Discovery
@@ -236,9 +256,11 @@ find . -maxdepth 2 -type f \( -name "CHANGELOG*" -o -name "HISTORY*" -o -name "R
 | 1000-5000 files | At least 2000 files (40%+) |
 | 5000+ files | At least 3000 files (60%+) |
 
-**Minimum code line analysis:**
-- Must analyze at least 10,000 lines of code
-- For large codebases: at least 50,000 lines
+**Minimum code line analysis** (proportional to repo size):
+- Repos under 10,000 lines: analyze ALL lines
+- Larger repos: at least 10,000 lines
+- Very large codebases (500k+ lines): at least 50,000 lines, prioritized by
+  the most-changed and most-imported files
 
 **Coverage requirements:**
 - ALL top-level directories documented

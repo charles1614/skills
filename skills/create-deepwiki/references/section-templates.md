@@ -37,7 +37,7 @@ Include when installation is non-trivial:
 - **Components table**: Component | File Location | Key Methods | Responsibility
 - Multi-process/thread architecture (if applicable)
 - Inter-process communication patterns
-- Message formats and data classes (5-10 code examples)
+- Message formats and data classes (4-10 code examples)
 
 ### Configuration System
 
@@ -55,7 +55,7 @@ Include when complex configuration exists:
 - Batching strategies with trade-offs
 - Scheduling policies comparison
 - State transitions (Mermaid state diagram if complex)
-- 5-10 code snippets covering parsing, batching, scheduling, error handling
+- 4-10 code snippets covering parsing, batching, scheduling, error handling
 
 ### Memory Management / Caching
 
@@ -137,9 +137,13 @@ an index `N-architecture-decisions.md` plus `N-M-adr-<slug>.md` per ADR —
 never in an `adr/` subdirectory (the DeepWiki upload API flattens
 subdirectory paths, breaking links and ordering).
 
-**ADR format**:
+**ADR format** (byline directly after the H1, then a blank line before Status):
 ```markdown
 # ADR-NNNN: [Decision Title]
+
+**Part of**: [Architecture Documentation](index.md)
+**Generated**: [timestamp]
+**Source commit**: [hash]
 
 **Status**: Proposed | Accepted | Deprecated | Superseded
 **Date**: YYYY-MM-DD
@@ -275,13 +279,25 @@ Generate from all available sources. If no formal files exist, extract from:
 - Version files and package manifests
 - Architectural changes in the codebase
 
+**Evidence rule — never invent history.** Every milestone, version row,
+deprecation, and issue reference must trace to a real source: a git tag, a
+dated commit, a CHANGELOG/ROADMAP entry, or a code comment. Cite issue/PR
+numbers only when they appear verbatim in those sources. When git history is
+thin (a squashed release dump, a fresh import), shrink this section to what
+the evidence supports — drop the subsections you cannot ground, and if the
+remainder cannot reach the word-count floor without padding, merge it into
+the Overview section instead (see the merge-don't-pad rule in SKILL.md
+Task 3). The template below shows the *maximum* shape, not a quota.
+
 ### Template
+
+The metadata byline sits immediately after the H1 — nothing (not even a
+back-link) between them, or the app renders it as body text:
 
 ```markdown
 # Project Evolution and Roadmap
 
-[<-Back to Index](index.md)
-
+**Part of**: [Architecture Documentation](index.md)
 **Generated**: [date]
 **Source commit**: [hash]
 
@@ -326,26 +342,29 @@ Generate from all available sources. If no formal files exist, extract from:
 
 ### Known Issues
 
-From code analysis (TODO/FIXME comments):
-- Performance bottleneck in X (Issue #234)
-- Memory leak in Y (being investigated)
+From code analysis (TODO/FIXME comments) — cite the comment's `file:line`,
+and an issue number only if the comment names one:
+- Performance bottleneck in X (`path/file.py:123`)
+- Memory leak in Y (being investigated, `path/other.py:45`)
 - Incompatibility with Z (workaround in place)
 
 ## Future Direction
 
 ### Planned Features
 
-From ROADMAP.md and GitHub milestones:
+From ROADMAP.md and GitHub milestones (omit this subsection entirely when no
+such sources exist). Use plain bullets — the app does not render `- [ ]`
+task-list syntax:
 
 **Q4 2025** (In Progress):
-- [ ] Feature improvement
-- [ ] New capability
-- [ ] Optimization
+- Feature improvement
+- New capability
+- Optimization
 
 **Q1 2026** (Planned):
-- [ ] Major feature
-- [ ] Platform support
-- [ ] Deployment option
+- Major feature
+- Platform support
+- Deployment option
 
 ### Areas for Improvement
 
@@ -396,15 +415,18 @@ This section documents the project's evolution from inception to current state, 
 
 ### Content Balance
 
-| Content Type | Percentage | Purpose |
-|--------------|------------|---------|
-| Text (paragraphs + bullets) | 50-60% | Explain concepts and decisions |
-| Mermaid diagrams | 30-40% | Show architecture and flows |
-| Code snippets | 10-20% | Illustrate key implementations |
+Per major section (counts, not percentages — prose carries the explanation):
+
+| Content Type | Target | Purpose |
+|--------------|--------|---------|
+| Text (paragraphs + bullets) | The majority of every section's words | Explain concepts and decisions |
+| Mermaid diagrams | 1-3 per file, ≤~15 nodes each | Show architecture and flows |
+| Code snippets | 4-10 per file, 5-15 lines each | Illustrate key implementations |
+| Tables | Where structure helps (components, comparisons) | Map features to `file:line` |
 
 ### Code Snippets Strategy
 
-- Include 5-10 snippets per major section
+- Include 4-10 snippets per major section
 - Keep snippets to 5-15 lines
 - Cover different aspects and patterns:
   - Main pattern implementation
@@ -412,8 +434,11 @@ This section documents the project's evolution from inception to current state, 
   - Error handling
   - Configuration examples
   - Integration points
-- Always attribute with file path and function/class name
-- Add explanatory comments for complex logic
+- Always attribute with the `From: path:N-M` header line (grammar in
+  [`format-guidelines.md`](format-guidelines.md)) — Task 7 verifies these
+  mechanically
+- Quote the source **verbatim** — never add or edit comments inside an
+  attributed snippet; explanation belongs in the surrounding prose
 
 ### What to Avoid
 

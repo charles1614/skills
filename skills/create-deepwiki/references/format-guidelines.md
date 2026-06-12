@@ -26,7 +26,9 @@
 | Decision trees | `flowchart` | Logic flows, pipelines |
 | State machines | `stateDiagram-v2` | State transitions |
 
-Keep diagrams focused: max 15-20 nodes.
+Keep diagrams focused: split a diagram once it grows past ~15 nodes (the
+DeepWiki app renders diagrams into a 500px-tall card — oversized ones scale
+down small). Prefer `graph LR` for wide component graphs.
 
 ### Grammar and Syntax Rules (CRITICAL)
 
@@ -126,9 +128,23 @@ sequenceDiagram
 
 ### Guidelines
 
-- **5-10 snippets per major section**
+- **4-10 snippets per major section**
 - **5-15 lines each** (max 20)
-- **Always attribute** with file path and function name
+- **Always attribute** with the `From:` header line — Task 7 verifies these
+  mechanically against the repo
+- **Quote verbatim**: never add, edit, or remove comments inside an
+  attributed snippet — explanation belongs in the surrounding prose.
+  Elide with a bare `# ...` line when you must shorten.
+
+### Attribution Grammar
+
+First line inside the fence, using the language's comment token:
+
+```
+# From: path/to/file.py:123-135            single range
+// From: src/gateway/auth.ts:30-42         single range (JS/TS)
+# From: README.md:46-49, :62-63, :79       multiple ranges, path inherited
+```
 
 ### Example Format
 
@@ -136,7 +152,6 @@ sequenceDiagram
 # From: path/to/scheduler.py:123-135
 class Scheduler:
     def get_next_batch(self):
-        # Select requests for next batch using configured policy
         return self.policy.select(self.queue)
 ```
 
@@ -157,9 +172,19 @@ class Scheduler:
 
 ## Cross-References
 
-- Link to sections: `[Section Name](filename.md)`
-- Link to subsections: `[Subsection](filename.md#anchor)`
+- Link to other pages by FILE ONLY: `[Section Name](filename.md)` — the
+  app does not navigate cross-file anchors (`filename.md#anchor` breaks).
+- Same-page jumps may use `#anchor`; the heading ID is the heading text
+  with formatting stripped, lowercased, non-word chars (ASCII) removed,
+  spaces → `-` (e.g. `## Request Flow & Batching` → `#request-flow--batching`).
 - Use descriptive text, not "click here"
+
+## Math and Formulas
+
+The app has no LaTeX/KaTeX support — `$x$` and `$$...$$` render literally.
+Write formulas as code spans or Unicode: `x ∈ [0, 1]`, `O(n log n)`,
+`a·v² + b`. For derivations, quote the source code that implements them
+instead of typesetting the math.
 
 ## Metadata and Attribution
 
@@ -179,8 +204,11 @@ Each file should start with:
 
 ### Directory Structure
 
+All images live in `img/` under the resolved output root (default
+`.deepwiki/<project-name>/` — see SKILL.md's output-root resolution):
+
 ```
-docs/<project-name>/
+.deepwiki/<project-name>/
 ├── img/
 │   ├── architecture-diagram.png
 │   ├── request-flow.svg
@@ -192,13 +220,17 @@ docs/<project-name>/
 ### Copying Images from Project
 
 ```bash
-mkdir -p "docs/<project-name>/img"
+mkdir -p ".deepwiki/<project-name>/img"
 
-# Copy architecture diagrams
+# Copy architecture diagrams (exclude prior exports and .paper inputs)
 find . -type f \( -iname "*architecture*.png" -o -iname "*diagram*.png" \) \
-  | grep -v "node_modules\|\.git" \
-  | xargs -I {} cp {} "docs/<project-name>/img/"
+  | grep -v "node_modules\|\.git\|\.deepwiki\|\.paper" \
+  | xargs -I {} cp {} ".deepwiki/<project-name>/img/"
 ```
+
+Give every image a **descriptive, unique basename** (`rl-framework.png`,
+not `diagram.png`) — the upload API matches refs by basename, extension-blind,
+and silently renames collisions, which breaks the markdown reference.
 
 ### Reference Format
 
