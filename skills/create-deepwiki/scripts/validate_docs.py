@@ -2,6 +2,8 @@
 """
 Validation script for DeepWiki documentation.
 Checks Mermaid syntax, section structure, links, and table format.
+
+Usage: python3 validate_docs.py <export-dir>   (e.g. .deepwiki/<project-name>/)
 """
 
 import json
@@ -357,12 +359,13 @@ def validate_adr_file(content: str, filename: str) -> List[Dict[str, Any]]:
     """Validate an Architecture Decision Record file."""
     errors = []
 
-    # Check naming convention (NNNN-*.md)
-    if not re.match(r'^\d{4}-', filename):
+    # Check naming convention: flat numbered child of the ADR section,
+    # e.g. 9-1-adr-use-postgres.md (sorts under section 9 in the app sidebar)
+    if not re.match(r'^\d+(-\d+)*-adr-[a-z]', filename):
         errors.append({
             'line': 1,
             'type': 'adr_format',
-            'message': f"ADR filename should start with NNNN- prefix: '{filename}'"
+            'message': f"ADR filename should match N-M-adr-<slug>.md (flat, numbered under the ADR section): '{filename}'"
         })
 
     # Check required sections
@@ -388,6 +391,26 @@ def validate_adr_file(content: str, filename: str) -> List[Dict[str, Any]]:
 def validate_index(content: str, docs_dir: Path) -> List[Dict[str, Any]]:
     """Validate index.md has required structure."""
     errors = []
+
+    # YAML frontmatter names the wiki: the DeepWiki upload API reads
+    # title/slug/description from it (falling back to the first H1 and an
+    # auto-derived slug), and re-uploads match the existing wiki by slug.
+    fm_match = re.match(r'\A---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    if not fm_match:
+        errors.append({
+            'line': 1,
+            'type': 'missing_section',
+            'message': "index.md missing YAML frontmatter (title/slug/description name the wiki on upload)"
+        })
+    else:
+        fm = fm_match.group(1)
+        for key in ('title', 'slug', 'description'):
+            if not re.search(rf'^{key}\s*:\s*\S', fm, re.MULTILINE):
+                errors.append({
+                    'line': 1,
+                    'type': 'missing_section',
+                    'message': f"index.md frontmatter missing '{key}:'"
+                })
 
     if '## Overview' not in content:
         errors.append({
@@ -447,8 +470,11 @@ def validate_file(file_path: Path, docs_dir: Path) -> List[Dict[str, Any]]:
         elif in_mermaid:
             mermaid_content.append(line)
 
-    # Determine file type and apply appropriate validators
-    is_adr = 'adr' in str(file_path.parent.name)
+    # Determine file type and apply appropriate validators.
+    # ADRs are flat numbered children (e.g. 9-1-adr-use-postgres.md) — the
+    # DeepWiki upload API flattens subdirectories, so an adr/ folder would
+    # break links and ordering after upload.
+    is_adr = bool(re.match(r'^\d+(-\d+)*-adr-', filename))
     is_index = filename == 'index.md'
 
     if is_adr:
