@@ -14,12 +14,13 @@ numerically per dash-separated number part (`components/WikiViewer.tsx`).
   second if present.
 - Use **un-padded** numbered prefixes: `1-overview.md`, `2-architecture.md`,
   `2-1-request-flow.md`, `10-deployment.md`. Sorting is numeric (`2-` before
-  `10-`), so zero-padding (`01-`) is unnecessary and leaks into the label
-  ("01 Overview").
+  `10-`; the app normalizes `01` → `1`), so zero-padding buys nothing —
+  stay un-padded so filenames, labels, and links read identically.
 - Label derivation: `2-1-request-flow.md` → "2.1 Request Flow". Choose slugs
   that title-case well.
-- The slug part must start with a **lowercase letter** or the file drops out
-  of numbered ordering entirely.
+- Start the slug part with a **lowercase letter** (the current app matches
+  case-insensitively, but lowercase kebab-case is the convention all links
+  and examples assume).
 
 ## Flat structure only — subdirectories break links
 
@@ -56,8 +57,13 @@ Re-uploading with the same `slug` updates the existing wiki in place
 - Links navigate between pages ONLY when the target ends in `.md`:
   `[Request Flow](2-1-request-flow.md)` (`lib/markdown/MarkdownRenderer.tsx:867`).
   Matching is case-insensitive; no leading `./`.
-- `[[wiki-link]]` syntax is NOT supported. Anchors `#heading-id` work
-  (lowercased, non-word chars stripped, spaces → `-`).
+- **Cross-file anchors break navigation**: `2-arch.md#flow` does not end in
+  `.md`, is never intercepted by the wiki-link handler, and falls through to
+  a raw browser load. Link cross-file targets by FILE ONLY; anchors are for
+  same-page jumps.
+- Same-page anchors `#heading-id` work; IDs are derived as: strip
+  formatting, lowercase, remove non-word chars (ASCII), spaces → `-`.
+- `[[wiki-link]]` syntax is NOT supported.
 - External `http(s)` links open in a new tab.
 
 ## Page metadata byline
@@ -76,6 +82,10 @@ Bold labels work because the colon sits outside the strong tag:
 ```
 
 Anywhere else in the file, these lines render as ordinary paragraphs.
+Three traps: only the FIRST H1 in the document is processed; the first
+paragraph that doesn't match one of those labels ends the styled run; and
+anything between the H1 and the byline — a back-link, an `---` rule, even
+a stray sentence — kills the styling for everything after it.
 
 ## Table of contents
 
@@ -102,15 +112,32 @@ Rendered inline into a card capped at **500px height** with click-to-zoom
   references (`![x](img/foo.png)`, `./foo.png`, bare `foo.png`) to R2 URLs by
   basename match (`route.ts:36-117`). External `http(s)` image URLs pass
   through untouched.
+- Basename matching is case-insensitive AND extension-blind as a fallback —
+  `foo.png` and `foo.svg` collide, and a colliding upload is silently renamed
+  (`foo-1.png`), breaking the markdown ref. Basenames must be unique
+  **after stripping the extension and lowercasing**.
 - Formats: jpg/jpeg/png/gif/svg/webp. Limits: 5 MB per image, 50 files and
   10 MB total per upload.
 - Inline display caps at 500px height.
+- **Figure captions**: an image immediately followed (no blank line) by an
+  emphasis line renders as a centered figure with a muted caption
+  (`MarkdownRenderer.tsx`):
+
+  ```markdown
+  ![System Architecture](img/architecture.png)
+  *Figure 1: High-level system architecture*
+  ```
 
 ## Markdown dialect
 
 - Rendered with marked + DOMPurify. Raw HTML survives only for an allowlist
   (headings, lists, tables, `details`/`summary`, `img`, `svg`, …); anything
-  else is stripped — prefer pure markdown.
+  else is stripped — prefer pure markdown. `<details>`/`<summary>` is the
+  one useful HTML escape hatch (collapsible long listings).
+- **NOT supported — renders literally**: task lists (`- [ ]`), footnotes
+  (`[^1]`), math/LaTeX (`$...$`, `$$...$$` — no KaTeX), definition lists.
+  Write formulas as code spans or Unicode (`x ∈ [0, 1]`, `O(n log n)`);
+  use plain bullets instead of checkboxes.
 - Syntax highlighting: typescript, javascript, jsx, tsx, css, json, bash,
   markdown, yaml, python, sql. Other languages render as plain monospace —
   still fine, just unstyled.

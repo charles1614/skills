@@ -3,234 +3,246 @@
 ## Directory Structure Pattern
 
 ```
-docs/<project-name>/
-├── index.md                # Master TOC (GENERATE FIRST)
-├── img/                    # Images directory
-│   ├── architecture.png    # Copied from project
-│   └── flow-diagram.svg    # Architecture visuals
-├── adr/                    # Architecture Decision Records
-│   ├── 0001-initial-architecture.md
-│   └── 0002-database-choice.md
-├── 01-overview.md          # First section
-├── 02-architecture.md      # Second section
-├── 03-...                  # Subsequent sections
-└── ...
+.deepwiki/<project-name>/            ← resolved output root (see SKILL.md; a host
+├── index.md                         #   project may override the staging root)
+├── img/                             # image assets, uploaded in the same batch
+│   ├── architecture.png             # copied from project (descriptive basename)
+│   └── request-flow.svg
+├── 1-overview.md                    # first section
+├── 2-system-architecture.md         # second section
+├── 2-1-request-flow.md              # numbered child of section 2
+├── 3-...                            # subsequent sections
+├── 9-architecture-decisions.md      # ADR index (N = its section number)
+├── 9-1-adr-multi-process.md         # ADR children — flat, never an adr/ subdir
+└── 9-2-adr-kv-cache-design.md
 ```
+
+Every `.md` file lives FLAT at the export root. The upload API flattens
+subdirectory paths (`adr/x.md` → `adr-x.md`), which breaks every internal
+link to them — only `img/` holds non-markdown assets.
 
 ## File Naming Conventions
 
-- Use numbered prefixes: `01-`, `02-`, ... `10-`, `11-`
-- Use kebab-case after prefix: `01-overview.md`, `02-system-architecture.md`
-- ADRs use `NNNN-decision-title.md` format (e.g., `0001-use-postgres.md`)
-- Numbers provide clear ordering and navigation
+- Use **un-padded** numbered prefixes: `1-`, `2-`, ... `10-`, `11-`.
+  Sidebar sorting is numeric (`2-` before `10-`), so zero-padding is never
+  needed. Stay un-padded for consistency with labels and links.
+- Use kebab-case after the prefix, starting with a **lowercase letter**:
+  `1-overview.md`, `2-system-architecture.md`.
+- Numbered children of a section repeat its number: `2-1-request-flow.md`,
+  `2-2-batching.md` group and indent under `2-system-architecture.md`.
+- ADRs are numbered children of the ADR section: `N-M-adr-<slug>.md`
+  (e.g., `9-1-adr-use-postgres.md` where 9 is the ADR section's number).
+- The sidebar derives labels from filenames: `2-1-request-flow.md` →
+  "2.1 Request Flow". Choose slugs that title-case well.
 
 ## Example 1: ML Inference Engine (sglang)
 
 ```
-docs/sglang/
+.deepwiki/sglang/
 ├── index.md
 ├── img/
-│   ├── architecture-diagram.png
-│   ├── request-flow.svg
-│   └── performance-chart.png
-├── adr/
-│   ├── 0001-multi-process-architecture.md
-│   ├── 0002-kv-cache-design.md
-│   └── 0003-scheduling-policy.md
-├── 01-overview.md
-├── 02-installation.md
-├── 03-system-architecture.md
-├── 04-request-processing.md
-├── 05-memory-management.md
-├── 06-distributed-execution.md
-├── 07-model-execution.md
-├── 08-programming-interfaces.md
-├── 09-kernel-library.md
-├── 10-deployment.md
-├── 11-testing.md
-└── 12-roadmap.md
+│   ├── sglang-architecture.png
+│   ├── sglang-request-flow.svg
+│   └── sglang-performance.png
+├── 1-overview.md
+├── 2-installation.md
+├── 3-system-architecture.md
+├── 3-1-multi-process-ipc.md
+├── 3-2-request-scheduling.md
+├── 4-memory-management.md
+├── 5-distributed-execution.md
+├── 6-model-execution.md
+├── 7-programming-interfaces.md
+├── 8-kernel-library.md
+├── 9-deployment.md
+├── 10-testing.md
+├── 11-architecture-decisions.md
+├── 11-1-adr-multi-process-architecture.md
+├── 11-2-adr-kv-cache-design.md
+├── 11-3-adr-scheduling-policy.md
+└── 12-project-evolution.md
 ```
 
-**Table of Contents (index.md):**
-- Overview
-- Installation and Setup
-- System Architecture
-  - Multi-Process Architecture and IPC
-  - Request Scheduling and Batching
-  - Memory Management and HiCache
-- Model Execution
-  - Model Configuration and Loading
-  - Attention Mechanisms and Backends
-- Programming Interfaces
-  - Python Engine API
-  - HTTP Server and OpenAI API
+**Table of Contents (index.md)** — link by file only, never `file.md#anchor`:
+- [Overview](1-overview.md)
+- [Installation and Setup](2-installation.md)
+- [System Architecture](3-system-architecture.md)
+  - [Multi-Process Architecture and IPC](3-1-multi-process-ipc.md)
+  - [Request Scheduling and Batching](3-2-request-scheduling.md)
+- [Memory Management and HiCache](4-memory-management.md)
+- [Model Execution](6-model-execution.md)
+- [Programming Interfaces](7-programming-interfaces.md)
 - ...
 
 ## Example 2: Communication Library (deepep)
 
 ```
-docs/deepep/
+.deepwiki/deepep/
 ├── index.md
 ├── img/
-│   ├── communication-model.svg
-│   └── buffer-system.png
-├── adr/
-│   ├── 0001-communication-protocol.md
-│   └── 0002-buffer-strategy.md
-├── 01-overview.md
-├── 02-getting-started.md
-├── 03-architecture.md
-├── 04-communication-kernels.md
-├── 05-runtime-system.md
-├── 06-hardware-integration.md
-├── 07-python-api.md
-├── 08-testing.md
-└── 09-performance-analysis.md
+│   ├── deepep-communication-model.svg
+│   └── deepep-buffer-system.png
+├── 1-overview.md
+├── 2-getting-started.md
+├── 3-architecture.md
+├── 4-communication-kernels.md
+├── 5-runtime-system.md
+├── 6-hardware-integration.md
+├── 7-python-api.md
+├── 8-testing.md
+├── 9-performance-analysis.md
+├── 10-architecture-decisions.md
+├── 10-1-adr-communication-protocol.md
+└── 10-2-adr-buffer-strategy.md
 ```
 
 **Table of Contents:**
 - Overview
-- Getting Started
-  - Installation
-  - Build System
-- Architecture
-  - System Overview
-  - Communication Model
-  - Buffer System
-- Communication Kernels
-  - Intranode Kernels
-  - Internode Kernels
-  - Low-Latency Kernels
+- Getting Started (installation, build system)
+- Architecture (system overview, communication model, buffer system)
+- Communication Kernels (intranode, internode, low-latency)
 - ...
 
 ## Example 3: Web API Service (myapi)
 
 ```
-docs/myapi/
+.deepwiki/myapi/
 ├── index.md
 ├── img/
-│   ├── api-flow.png
-│   ├── database-schema.svg
-│   └── deployment-diagram.png
-├── adr/
-│   ├── 0001-api-versioning.md
-│   ├── 0002-authentication-method.md
-│   └── 0003-database-choice.md
-├── 01-overview.md
-├── 02-getting-started.md
-├── 03-system-architecture.md
-├── 04-api-design.md
-├── 05-data-layer.md
-├── 06-business-logic.md
-├── 07-infrastructure.md
-├── 08-security.md
-├── 09-monitoring.md
+│   ├── myapi-flow.png
+│   ├── myapi-database-schema.svg
+│   └── myapi-deployment.png
+├── 1-overview.md
+├── 2-getting-started.md
+├── 3-system-architecture.md
+├── 4-api-design.md
+├── 5-data-layer.md
+├── 6-business-logic.md
+├── 7-infrastructure.md
+├── 8-security.md
+├── 9-monitoring.md
 ├── 10-testing.md
-└── 11-evolution.md
+├── 11-architecture-decisions.md
+├── 11-1-adr-api-versioning.md
+├── 11-2-adr-authentication-method.md
+├── 11-3-adr-database-choice.md
+└── 12-project-evolution.md
 ```
-
-**Table of Contents:**
-- Overview
-- Getting Started
-- System Architecture
-  - High-Level Design
-  - Component Overview
-  - Data Flow
-- API Design
-  - REST Endpoints
-  - Authentication
-  - Rate Limiting
-- Data Layer
-  - Database Schema
-  - ORM Models
-  - Migrations
-- ...
 
 ## Example 4: CLI Tool (mybuild)
 
 ```
-docs/mybuild/
+.deepwiki/mybuild/
 ├── index.md
 ├── img/
-├── adr/
-│   ├── 0001-plugin-architecture.md
-│   └── 0002-config-format.md
-├── 01-overview.md
-├── 02-installation.md
-├── 03-architecture.md
-├── 04-command-system.md
-├── 05-plugin-system.md
-├── 06-configuration.md
-└── 07-testing.md
+├── 1-overview.md
+├── 2-installation.md
+├── 3-architecture.md
+├── 4-command-system.md
+├── 5-plugin-system.md
+├── 6-configuration.md
+├── 7-testing.md
+├── 8-architecture-decisions.md
+├── 8-1-adr-plugin-architecture.md
+└── 8-2-adr-config-format.md
 ```
 
-**Table of Contents:**
-- Overview
-- Installation
-- Architecture Overview
-- Command System
-  - Command Registry
-  - Argument Parsing
-  - Plugin System
-- Core Functionality
-  - Build Pipeline
-  - Dependency Resolution
-  - Task Execution
-- ...
+Smaller project → fewer, merged sections (see the merge-don't-pad rule in
+SKILL.md Task 3). Don't manufacture sections to imitate a bigger example.
+
+## Example 5: Paper-Release Repo (real shape, abbreviated)
+
+A research-code release with a `.paper/` folder and a companion recipes
+repo produced this verified export:
+
+```
+.deepwiki/alpamayo-r1/
+├── index.md
+├── img/
+│   ├── paper-fig1-architecture.png   # paper figure, attributed + divergence note
+│   └── rl-framework.png              # repo asset
+├── 1-overview.md
+├── 2-system-architecture.md
+├── 3-vlm-reasoning-and-token-fusion.md
+├── ...
+├── 8-post-training-recipes.md        # nested companion repo gets its own cluster
+├── 8-1-supervised-fine-tuning.md
+├── 8-2-rl-post-training-grpo.md
+├── 9-paper-vs-implementation.md      # required when .paper/ exists
+├── 10-architecture-decisions.md
+├── 10-1-adr-dual-pathway-vla.md
+├── ...
+└── 11-project-evolution.md
+```
 
 ## Index File Template
 
+The YAML frontmatter is REQUIRED (the upload API reads `title`/`slug`/
+`description` from it). The byline lines sit immediately after the H1 with
+nothing in between:
+
 ```markdown
-# [Project Name] Architecture Documentation
-
-Last indexed: [date] ([commit hash])
-
 ---
+title: MyAPI Architecture
+slug: myapi-architecture
+description: One-line summary shown in the wiki list.
+---
+
+# MyAPI Architecture Documentation
+
+**Last indexed**: 2025-10-15 (commit a1b2c3d)
 
 ## Overview
 
+One-paragraph orientation: what the system is and how to read this wiki.
+
 ## System Architecture
-- [Subsection 1](02-system-architecture.md#subsection-1)
-- [Subsection 2](02-system-architecture.md#subsection-2)
+- [System Architecture](3-system-architecture.md)
+- [Request Flow](3-1-request-flow.md)
 
-## Component Name
-- [Feature A](03-component.md#feature-a)
-- [Feature B](03-component.md#feature-b)
+## API Design
+- [API Design](4-api-design.md)
 
-## Programming Interfaces
-- [Python API](04-interfaces.md#python-api)
-- [REST API](04-interfaces.md#rest-api)
+## Data Layer
+- [Data Layer](5-data-layer.md)
 
-## Testing
-- [Test Framework](05-testing.md)
+## Architecture Decisions
+- [Architecture Decisions](11-architecture-decisions.md)
 
 ## Project Evolution
-- [Roadmap](06-evolution.md)
+- [Project Evolution](12-project-evolution.md)
 ```
+
+Link each entry to its **file** (`3-system-architecture.md`), never to
+`file.md#anchor` — the app does not navigate cross-file anchors. Same-page
+`#anchor` links are fine inside a page.
 
 ## Key Principles
 
 | Principle | Description |
 |-----------|-------------|
 | Flexible | Structure adapts to codebase |
-| Numbered | Zero-padded prefixes for ordering |
-| Descriptive | Clear file names after prefix |
-| Hierarchical | Group related topics |
-| No forced structure | Only create needed files |
-| Image directory | Always include `img/` |
+| Numbered | Un-padded numeric prefixes; numeric sidebar sort |
+| Flat | All `.md` at export root; only `img/` as a subdirectory |
+| Descriptive | Clear kebab-case names after the prefix |
+| Hierarchical | `N-M-` children group under section `N` |
+| No forced structure | Only create needed files; merge thin sections |
+| Image directory | Always include `img/` with descriptive, unique basenames |
 
 ## Complete Section File Example
 
-Below is a structurally complete example showing all required elements in a single section file. Actual sections must meet the 1500-word minimum requirement — this example is abbreviated to show the template.
+Below is a structurally complete example showing all required elements in a
+single section file. Actual sections must meet the 1500-word minimum
+requirement — this example is abbreviated to show the template. Note the
+order: H1 first, then the metadata byline immediately after (the app styles
+it as a muted caption only in that position).
 
 ````markdown
-[<-Back to Index](index.md)
+# System Architecture
 
 **Part of**: [MyAPI Architecture Documentation](index.md)
 **Generated**: 2025-10-15T14:30:00Z
 **Source commit**: a1b2c3d
-
-# System Architecture
 
 ## Introduction
 
@@ -347,7 +359,7 @@ export class UserRepository {
 
 ## Summary
 
-The layered architecture provides clear separation of concerns, enabling independent testing and scaling of each tier. The gateway pattern centralizes cross-cutting concerns, while the repository pattern with caching reduces database load. For details on the API design decisions, see [API Design](04-api-design.md). For the data layer schema, see [Data Layer](05-data-layer.md).
+The layered architecture provides clear separation of concerns, enabling independent testing and scaling of each tier. The gateway pattern centralizes cross-cutting concerns, while the repository pattern with caching reduces database load. For details on the API design decisions, see [API Design](4-api-design.md). For the data layer schema, see [Data Layer](5-data-layer.md).
 ````
 
 ## Project Name Detection
