@@ -55,11 +55,10 @@ down small). Prefer `graph LR` for wide component graphs.
 
 5. **Comments**: Use `%%` for comments
 
-6. **Styling**:
-   ```
-   classDef className fill:#color,stroke:#color
-   A:::className
-   ```
+6. **Styling**: leave diagrams unstyled. The DeepWiki app applies its own
+   unified Mermaid theme at render time, so never emit `classDef`, `style`,
+   or `linkStyle` color directives — hardcoded fills/strokes override the
+   app theme and clash with it (see deepwiki-app-constraints.md).
 
 ### Common Pitfalls
 
@@ -81,27 +80,25 @@ graph TB
     E --> F[Response]
 ```
 
-### Advanced Example with Styling
+### Advanced Example with Subgraphs
 
 ```mermaid
 graph TB
-    %% Style Definitions
-    classDef input fill:#e1f5ff,stroke:#0288d1
-    classDef process fill:#fff9c4,stroke:#f57f17
-    classDef output fill:#c8e6c9,stroke:#388e3c
-
-    Input(User Request):::input
-    Input --> Gateway[API Gateway]:::process
+    Input(User Request)
+    Input --> Gateway[API Gateway]
 
     subgraph Processing [Request Processing]
         direction TB
-        Gateway --> Auth[Authentication]:::process
-        Auth --> Valid[Validation]:::process
-        Valid --> Process[Process]:::process
+        Gateway --> Auth[Authentication]
+        Auth --> Valid[Validation]
+        Valid --> Process[Process]
     end
 
-    Process --> Output(Response):::output
+    Process --> Output(Response)
 ```
+
+Note the absence of `classDef` styling — the app's theme colors every
+diagram consistently across the wiki (rule 6 above).
 
 ### Sequence Diagram Example
 
