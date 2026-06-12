@@ -132,7 +132,10 @@ Include when the project has explicit error handling patterns:
 
 ### Architecture Decision Records (ADRs)
 
-**Always generate ADRs** in `docs/<project-name>/adr/` directory.
+**Always generate ADRs** as flat numbered children of a dedicated section:
+an index `N-architecture-decisions.md` plus `N-M-adr-<slug>.md` per ADR —
+never in an `adr/` subdirectory (the DeepWiki upload API flattens
+subdirectory paths, breaking links and ordering).
 
 **ADR format**:
 ```markdown
@@ -154,7 +157,7 @@ What are the trade-offs? What are the benefits and drawbacks?
 What other options were evaluated?
 ```
 
-**File naming**: `NNNN-decision-title.md` (e.g., `0001-use-postgres.md`)
+**File naming**: `N-M-adr-<slug>.md` (e.g., `9-1-adr-use-postgres.md`, where 9 is the ADR section's number)
 
 **What to document as ADRs**:
 - Technology choices (database, framework, language)
@@ -167,6 +170,67 @@ What other options were evaluated?
 - Searching for comments: `grep -r "TODO\|FIXME\|NOTE\|design\|decision" --include="*.py"`
 - Reading README and existing docs for rationale
 - Identifying non-obvious architectural patterns in code
+
+### Paper vs. Implementation (only when `.paper/` exists)
+
+When the repo is the open-source release of a paper (detected via the
+`.paper/` folder, see SKILL.md Task 1), generate `N-paper-vs-implementation.md`
+analyzing how the released code diverges from the paper.
+
+**Stance — code is current truth, paper is design intent.** The paper
+usually predates the released code. Frame differences as evolution
+(renames, post-paper features, changed hyperparameters, dropped
+prototypes), never as errors in either artifact. Where they disagree about
+current behavior, the code wins; where the code is silent about intent, the
+paper explains why.
+
+**Grounding rules (enforced in Task 7 Phase C):**
+- Paper claims cite `paper_text.txt` pages: "(paper p. N)" from the
+  `=== PAGE N ===` markers. Grep before writing; unverifiable paper claims
+  are removed or hedged.
+- Code claims cite `file:line` like every other section (Task 7 Phase A/B).
+- The prior `_analysis.md` and `paper_figures_text.txt` may guide where to
+  look, but are never cited as evidence.
+
+**Required structure:**
+```markdown
+# Paper vs. Implementation
+
+**Part of**: [Architecture Documentation](index.md)
+**Generated**: [timestamp]
+**Source commit**: [hash]
+
+## Introduction
+Identify the paper (exact title and date from page 1 of paper_text.txt),
+the relationship between paper and repo, and the comparison's scope.
+
+## Alignment Overview
+| Paper concept (paper p. N) | Code location | Status |
+|---|---|---|
+| ... | `path/file.py:123` | matches / renamed / changed / absent in code / post-paper addition |
+
+## Key Divergences
+2-4 deep-dive subsections (###) on the most significant differences:
+what the paper specifies (with page cites), what the code does (with
+file:line), and the likely engineering rationale (hedged when inferred).
+
+## In the Paper Only
+Components/experiments described but not in the released code.
+
+## In the Code Only
+Features the paper never mentions (post-paper additions, infra, tooling).
+
+## Summary
+What a reader of the paper must know before reading this codebase.
+```
+
+**Figures**: optional — copy a paper figure from `.paper/**/figures/` into
+`img/` only when it materially clarifies a divergence AND fits the upload
+budget (5 MB per image, 10 MB total per upload).
+
+**Multiple papers**: make `N-paper-vs-implementation.md` an index and write
+one `N-M-paper-<short-slug>.md` child per paper, each following this
+template.
 
 ## Domain-Specific Sections
 
