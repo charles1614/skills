@@ -83,8 +83,21 @@ def validate_mermaid_block(content: str, start_line: int) -> List[Dict[str, Any]
     errors = []
     lines = content.split('\n')
 
+    # Detect the diagram type from its first non-comment line. sequence- and
+    # state-diagrams use loop/alt/opt/state...end blocks and "state X {"
+    # composite states; the flowchart-oriented node-ID and subgraph/end checks
+    # below would mis-flag those, so they are skipped for seq/state diagrams.
+    diagram_type = ''
+    for _l in lines:
+        _s = _l.strip()
+        if not _s or _s.startswith('%%'):
+            continue
+        diagram_type = _s.split()[0].lower()
+        break
+    is_seq_or_state = diagram_type.startswith('sequencediagram') or diagram_type.startswith('statediagram')
+
     # Keywords that ARE valid at start of line (not node IDs)
-    valid_keywords = {'subgraph', 'direction', 'end', 'style', 'classDef', 'class', 'graph', 'flowchart', 'sequenceDiagram', 'stateDiagram', 'participant', 'actor', 'note', 'alt', 'else', 'opt', 'loop', 'par', 'and', 'rect', 'activate', 'deactivate'}
+    valid_keywords = {'subgraph', 'direction', 'end', 'style', 'classDef', 'class', 'graph', 'flowchart', 'sequenceDiagram', 'stateDiagram', 'state', 'participant', 'actor', 'note', 'alt', 'else', 'opt', 'loop', 'par', 'and', 'rect', 'critical', 'break', 'activate', 'deactivate'}
 
     # Track bracket balance
     brackets = {'[': 0, '(': 0, '{': 0}
@@ -98,6 +111,18 @@ def validate_mermaid_block(content: str, start_line: int) -> List[Dict[str, Any]
         if not stripped or stripped.startswith('%%'):
             continue
 
+        # Hardcoded colors override the DeepWiki app's unified Mermaid theme
+        # (lib/markdown/mermaidTheme.ts in the app) and clash with it.
+        # stroke-width/-dasharray don't match: the colon must follow directly.
+        if re.match(r'(?i)(classDef|style|linkStyle)\b', stripped) and \
+                re.search(r'(?i)\b(?:fill|stroke|color)\s*:', stripped):
+            errors.append({
+                'line': line_num,
+                'type': 'mermaid_hardcoded_style',
+                'message': "Hardcoded diagram color (fill/stroke/color directive) — the DeepWiki app applies its own Mermaid theme; leave diagrams unstyled"
+            })
+            continue
+
         # Skip lines starting with valid keywords
         first_word = stripped.split()[0] if stripped.split() else ''
         if first_word.lower() in valid_keywords or first_word.rstrip(':').lower() in valid_keywords:
@@ -107,7 +132,7 @@ def validate_mermaid_block(content: str, start_line: int) -> List[Dict[str, Any]
         # Pattern: word with space before [ or ( or { or -->
         # But exclude lines that start with valid keywords
         node_pattern = r'^(\s*)([A-Za-z_][A-Za-z0-9_\s]*?)(?:\[|\(|\{|-->|-.->|==>)'
-        match = re.match(node_pattern, line)
+        match = None if is_seq_or_state else re.match(node_pattern, line)
         if match:
             node_id = match.group(2).strip()
             # Skip if it's a keyword or keyword combination
@@ -142,9 +167,10 @@ def validate_mermaid_block(content: str, start_line: int) -> List[Dict[str, Any]
                         'message': f"Invalid arrow syntax. Use -->, -.->, or ==>"
                     })
 
-    # Check subgraph/end balance
+    # Check subgraph/end balance (flowcharts only — in sequence/state diagrams
+    # `end` closes loop/alt/opt/state blocks, not subgraphs, so skip the check).
     subgraph_count = 0
-    for i, line in enumerate(lines):
+    for i, line in enumerate([] if is_seq_or_state else lines):
         stripped = line.strip().lower()
         if stripped.startswith('subgraph'):
             subgraph_count += 1
@@ -231,7 +257,7 @@ def validate_section_structure(content: str, filename: str) -> List[Dict[str, An
             })
 
     # Check for code references (backtick file paths) - only in filtered content
-    code_ref_pattern = r'`[a-zA-Z0-9_/.-]+\.(py|js|ts|go|rs|java|c|cpp|h)(?::\d+)?`'
+    code_ref_pattern = r'`[a-zA-Z0-9_/.-]+\.(py|js|ts|go|rs|java|c|cpp|h)(?::\d+(?:-\d+)?)?`'
     if not re.search(code_ref_pattern, filtered_content):
         # Only warn for non-overview files
         if 'overview' not in filename.lower() and 'evolution' not in filename.lower() and 'roadmap' not in filename.lower():
@@ -407,10 +433,14 @@ def validate_word_count(content: str, filename: str) -> List[Dict[str, Any]]:
     # Get content outside code blocks
     filtered_content, _ = extract_content_outside_code_blocks(content)
 
-    # Count words (excluding markdown syntax)
+    # Count words (excluding markdown syntax). CJK scripts have no spaces, so a
+    # whitespace split alone would count a whole Chinese paragraph as ~1 "word"
+    # and spuriously fail the minimum. Count each CJK codepoint as a word too so
+    # non-English wikis are measured fairly.
     text_only = re.sub(r'[#*`|\->\[\]()]', ' ', filtered_content)
-    words = [w for w in text_only.split() if len(w) > 1]
-    word_count = len(words)
+    ascii_words = len([w for w in text_only.split() if len(w) > 1])
+    cjk_chars = len(re.findall(r'[㐀-䶿一-鿿豈-﫿]', text_only))
+    word_count = ascii_words + cjk_chars
 
     if word_count < MIN_DESCRIPTION_WORDS:
         errors.append({
@@ -426,6 +456,42 @@ def validate_word_count(content: str, filename: str) -> List[Dict[str, Any]]:
             'message': f"Document too long: {word_count} words (maximum: {MAX_DESCRIPTION_WORDS})"
         })
 
+    return errors
+
+
+def validate_cjk_emphasis(content: str, filename: str) -> List[Dict[str, Any]]:
+    """Flag CJK emphasis that silently fails to render.
+
+    Per the CommonMark / marked emphasis "flanking" rules, a closing ``**``/``*``
+    delimiter that is immediately preceded by ASCII or full-width punctuation
+    (``)`` ``]`` ``）`` ``】``) and immediately followed by a CJK character is NOT
+    right-flanking, so the emphasis never closes and the asterisks render as
+    literal text — e.g. ``**term(gloss)**汉字``. Detected precisely by requiring
+    the whole bold span (opening ``**`` … close-bracket … closing ``**`` … CJK),
+    so a valid close-then-paren (``**term**(gloss)汉``) and a bold opened right
+    after a paren (``(见下)**重点**``) are NOT flagged. Fix by moving the
+    parenthetical outside the emphasis: ``**term**(gloss)汉字``.
+    """
+    errors = []
+    filtered_content, line_mapping = extract_content_outside_code_blocks(content)
+    cjk = r'[㐀-䶿一-鿿豈-﫿]'
+    # A bold span that ENDS with a close-bracket and is immediately followed by
+    # a CJK char: **term(gloss)**汉 — the closing ** is preceded by punctuation
+    # and followed by CJK, so it is not right-flanking and won't close. Requiring
+    # the opening ** and a bracket right before the closing ** keeps this precise:
+    # a bold OPENED right after a paren (e.g. (见下)**重点**) or the already-fixed
+    # form (**term**(gloss)汉) are correctly NOT matched.
+    broken_re = re.compile(r'\*\*[^*\n]*[)\]）】]\*\*' + cjk)
+    for i, line in enumerate(filtered_content.split('\n')):
+        if '**' not in line:
+            continue
+        scan = re.sub(r'`[^`]*`', '', line)  # ignore inline code spans
+        if broken_re.search(scan):
+            errors.append({
+                'line': line_mapping[i] if i < len(line_mapping) else i + 1,
+                'type': 'cjk_emphasis',
+                'message': "Emphasis won't render next to CJK: a closing ** preceded by punctuation and followed by a CJK char is not flanking (e.g. **term(gloss)**汉字), so it renders literally. Move the parenthetical outside: **term**(gloss)汉字."
+            })
     return errors
 
 
@@ -708,6 +774,7 @@ def validate_file(file_path: Path, docs_dir: Path) -> List[Dict[str, Any]]:
     errors.extend(validate_links(content, docs_dir, filename))
     errors.extend(validate_tables(content))
     errors.extend(validate_unsupported_markdown(content))
+    errors.extend(validate_cjk_emphasis(content, filename))
 
     return errors
 

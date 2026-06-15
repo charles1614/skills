@@ -55,11 +55,10 @@ down small). Prefer `graph LR` for wide component graphs.
 
 5. **Comments**: Use `%%` for comments
 
-6. **Styling**:
-   ```
-   classDef className fill:#color,stroke:#color
-   A:::className
-   ```
+6. **Styling**: leave diagrams unstyled. The DeepWiki app applies its own
+   unified Mermaid theme at render time, so never emit `classDef`, `style`,
+   or `linkStyle` color directives — hardcoded fills/strokes override the
+   app theme and clash with it (see deepwiki-app-constraints.md).
 
 ### Common Pitfalls
 
@@ -81,27 +80,25 @@ graph TB
     E --> F[Response]
 ```
 
-### Advanced Example with Styling
+### Advanced Example with Subgraphs
 
 ```mermaid
 graph TB
-    %% Style Definitions
-    classDef input fill:#e1f5ff,stroke:#0288d1
-    classDef process fill:#fff9c4,stroke:#f57f17
-    classDef output fill:#c8e6c9,stroke:#388e3c
-
-    Input(User Request):::input
-    Input --> Gateway[API Gateway]:::process
+    Input(User Request)
+    Input --> Gateway[API Gateway]
 
     subgraph Processing [Request Processing]
         direction TB
-        Gateway --> Auth[Authentication]:::process
-        Auth --> Valid[Validation]:::process
-        Valid --> Process[Process]:::process
+        Gateway --> Auth[Authentication]
+        Auth --> Valid[Validation]
+        Valid --> Process[Process]
     end
 
-    Process --> Output(Response):::output
+    Process --> Output(Response)
 ```
+
+Note the absence of `classDef` styling — the app's theme colors every
+diagram consistently across the wiki (rule 6 above).
 
 ### Sequence Diagram Example
 
@@ -275,6 +272,15 @@ graph TB
 ```
 *Figure 2: Detailed component interaction flow*
 ```
+
+## Non-English / CJK Wikis
+
+When the wiki body is Chinese/Japanese/Korean, keep prose in the target language but observe these rules so it both validates and renders:
+
+- **Lead required headings with the English keyword.** The validator (and the app's TOC) match `## Introduction` / `## Summary` / ADR `## Context` etc. literally, so write bilingual headings led by the English word: `## Introduction · 引言`, `## Summary · 总结`, `## Context · 背景`. A heading that starts with the CJK text won't be recognized.
+- **Never end an emphasis span with a bracket right before a CJK char.** Per CommonMark/marked flanking rules, `**术语(gloss)**汉字` does NOT close — the `**` renders literally. Move the gloss *outside* the emphasis: `**术语**(gloss)汉字`. (The validator flags the broken form as `cjk_emphasis`.) Bold that ends on a CJK char — `**多模态**` — is fine.
+- **Keep code, identifiers, file paths, and config keys verbatim/English** even in CJK prose; only translate prose. Mermaid node *IDs* stay ASCII (no spaces), but node *labels* may be CJK.
+- **Word count is CJK-aware**: each CJK codepoint counts as a word (a whitespace-only split would otherwise read a whole Chinese paragraph as ~1 word), so non-English pages are measured fairly against the 1500–6000 range.
 
 ## Academic Honesty
 
